@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Kalkulator naukowy</title>
+<!-- KaTeX LaTeX math rendering -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous" onload="window.onKatexLoaded && window.onKatexLoaded()"></script>
 <style>
 :root {
   --bg: #525659;
@@ -77,19 +80,32 @@ main {
 #expr::placeholder { color: var(--faint); }
 #preview { min-height: 20px; margin-top: 6px; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
 #preview.err { color: var(--err); }
-.preview-units { color: var(--eq-text); font-size: 12.5px; margin-top: 3px; opacity: .9; }
+.preview-units { color: var(--eq-text); font-size: 13px; margin-top: 4px; opacity: .95; overflow-x: auto; overflow-y: hidden; }
 #lastExpr { margin-top: 10px; color: var(--faint); font-size: 13px; min-height: 18px; overflow-wrap: anywhere; }
 #result { font-size: 34px; line-height: 1.2; overflow-wrap: anywhere; cursor: copy; }
 #result sup, .val sup, #preview sup, .hist sup { font-size: .62em; }
 #result .u { font-size: .7em; color: var(--eq-text); margin-left: 6px; font-weight: 500; }
-#unitTrack { margin-top: 6px; font-size: 14px; color: var(--eq-text); min-height: 0; overflow-wrap: anywhere; }
+#unitTrack { margin-top: 8px; font-size: 15px; color: var(--eq-text); min-height: 0; overflow-x: auto; overflow-y: hidden; max-width: 100%; }
 #unitTrack:not(:empty) {
-  padding: 4px 10px; background: var(--key-fn); border-radius: 6px; display: inline-block; border-left: 3px solid var(--eq-text);
+  padding: 6px 12px; background: var(--key-fn); border-radius: 6px; display: inline-flex; align-items: center; border-left: 3px solid var(--eq-text);
 }
-.unit-sub { font-size: 11.5px; color: var(--eq-text); opacity: .85; margin-top: 2px; }
+.unit-sub { font-size: 12px; color: var(--eq-text); opacity: .9; margin-top: 2px; overflow-x: auto; }
 #resultRaw { color: var(--muted); font-size: 13px; min-height: 16px; margin-top: 2px; }
 .frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; line-height: 1.05; font-size: .85em; margin: 0 1px; }
 .frac > span:first-child { border-bottom: 1px solid currentColor; padding: 0 2px; }
+
+/* ---- KaTeX & matematyka ---- */
+.katex { font-size: 1.05em; color: inherit; }
+.katex-display { margin: 0; }
+.katex .mord.text { font-family: inherit; font-size: .95em; }
+
+/* ---- Tryb osadzenia (Embed / iFrame) ---- */
+html.embedded, html.embedded body { min-height: auto; }
+html.embedded main { max-width: 480px; margin: 0 auto; padding: 8px; grid-template-columns: 1fr; }
+html.embedded .side, html.embedded .help { display: none !important; }
+html.embedded[data-bg="transparent"], html.embedded[data-bg="transparent"] body { background: transparent !important; }
+html.embedded[data-hide-keys="1"] #keys { display: none !important; }
+html.embedded[data-hide-hist="1"] .hist { display: none !important; }
 
 /* ---- klawiatura ---- */
 .keys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 12px; }
@@ -397,6 +413,56 @@ function uText(u) {
   if (!bot.length) return top.join('·');
   const den = bot.length > 1 ? `(${bot.join('·')})` : bot[0];
   return `${top.length ? top.join('·') : '1'}/${den}`;
+}
+
+function uTex(u) {
+  if (!u) return '';
+  const keys = Object.keys(u).filter((k) => Math.abs(u[k]) > 1e-9).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+  const part = (k, e) => {
+    if (e === 1) return `\\text{${k}}`;
+    if (e === 0.5) return `\\sqrt{\\text{${k}}}`;
+    return `\\text{${k}}^{${e}}`;
+  };
+  const top = keys.filter((k) => u[k] > 0).map((k) => part(k, u[k]));
+  const bot = keys.filter((k) => u[k] < 0).map((k) => part(k, -u[k]));
+  if (!top.length && !bot.length) return '';
+  if (!bot.length) return top.join(' \\cdot ');
+  const num = top.length ? top.join(' \\cdot ') : '1';
+  const den = bot.join(' \\cdot ');
+  return `\\frac{${num}}{${den}}`;
+}
+
+function rawToTex(s) {
+  if (!s) return '';
+  let str = s.trim()
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g, (m) => '^' + [...m].map((c) => SUP_DIGIT[c]).join(''));
+  const slashIdx = str.indexOf('/');
+  if (slashIdx !== -1) {
+    let num = str.slice(0, slashIdx).trim();
+    let den = str.slice(slashIdx + 1).trim();
+    if (den.startsWith('(') && den.endsWith(')')) den = den.slice(1, -1).trim();
+    return `\\frac{${formatProductTex(num) || '1'}}{${formatProductTex(den) || '1'}}`;
+  }
+  return formatProductTex(str);
+}
+
+function formatProductTex(s) {
+  if (!s) return '';
+  const tokens = s.split(/[*·\s]+/).filter(Boolean);
+  const parts = tokens.map((tok) => {
+    if (tok.startsWith('(') && tok.endsWith(')')) {
+      return `(${rawToTex(tok.slice(1, -1))})`;
+    }
+    const m = /^([A-Za-zΩµμ]+)(?:\^(-?\d+(?:\.\d+)?))?$/.exec(tok);
+    if (m) {
+      const u = m[1];
+      const exp = m[2];
+      return `\\text{${u}}` + (exp ? `^{${exp}}` : '');
+    }
+    if (/^\d+$/.test(tok)) return tok;
+    return `\\text{${tok}}`;
+  });
+  return parts.join(' \\cdot ');
 }
 
 const NAMED_PAIRS = [
@@ -850,21 +916,24 @@ function evq(n) {
 const PREC = { '+': 1, '-': 1, '*': 2, '/': 2, '^': 3 };
 
 function unitWalk(n) {
-  const plain = (u) => ({ text: '1', u, bare: true, prec: 9 });
+  const plain = (u) => ({ text: '1', tex: '1', u, bare: true, prec: 9 });
   switch (n.t) {
     case 'num': {
       if (uNone(n.u)) return plain(n.u);
       let txt = uText(n.u);
+      let tx = uTex(n.u);
       if (n.rawU) {
         txt = n.rawU.replace(/\^1\b/g, '').replace(/\^2\b/g, '²').replace(/\^3\b/g, '³').replace(/\*/g, '·');
+        tx = rawToTex(n.rawU);
       }
-      return { text: txt, u: n.u, bare: false, prec: 9 };
+      return { text: txt, tex: tx, u: n.u, bare: false, prec: 9 };
     }
     case 'var': {
       const q = evq(n);
       if (uNone(q.u)) return plain(q.u);
       const txt = (n.name in CONST && CONST[n.name].unit) ? CONST[n.name].unit : uText(q.u);
-      return { text: txt, u: q.u, bare: false, prec: 9 };
+      const tx = (n.name in CONST && CONST[n.name].unit) ? rawToTex(CONST[n.name].unit) : uTex(q.u);
+      return { text: txt, tex: tx, u: q.u, bare: false, prec: 9 };
     }
     case 'neg': case 'pct': return unitWalk(n.a);
     case 'fact': return plain({});
@@ -876,7 +945,9 @@ function unitWalk(n) {
         if (a.bare) return plain(q.u);
         const aText = a.prec < 3 || a.text.includes('/') ? `(${a.text})` : a.text;
         const expText = supNum(expVal);
-        return { text: `${aText}${expText}`, u: q.u, bare: false, prec: 3 };
+        const aTex = a.prec < 3 || a.tex.includes('\\frac') ? `\\left(${a.tex}\\right)` : a.tex;
+        const expTex = `^{${expVal}}`;
+        return { text: `${aText}${expText}`, tex: `${aTex}${expTex}`, u: q.u, bare: false, prec: 3 };
       }
       const a = unitWalk(n.a), b = unitWalk(n.b);
       if (a.bare && b.bare) return plain(q.u);
@@ -886,16 +957,29 @@ function unitWalk(n) {
       const wrap = (side, min) => (side.prec < min ? `(${side.text})` : side.text);
       let left = wrap(a, p);
       let right = wrap(b, p + (n.o === '/' || n.o === '-' ? 1 : 0));
-      return { text: `${left}${op}${right}`, u: q.u, bare: false, prec: p };
+
+      let tex;
+      if (n.o === '*') {
+        const wrapTex = (side, min) => (side.prec < min ? `\\left(${side.tex}\\right)` : side.tex);
+        tex = `${wrapTex(a, p)} \\cdot ${wrapTex(b, p)}`;
+      } else if (n.o === '/') {
+        tex = `\\frac{${a.tex}}{${b.tex}}`;
+      } else {
+        const opTex = n.o === '+' ? ' + ' : ' - ';
+        const wrapTex = (side, min) => (side.prec < min ? `\\left(${side.tex}\\right)` : side.tex);
+        tex = `${wrapTex(a, p)}${opTex}${wrapTex(b, p + 1)}`;
+      }
+      return { text: `${left}${op}${right}`, tex, u: q.u, bare: false, prec: p };
     }
     case 'call': {
       const parts = n.args.map(unitWalk);
       const q = evq(n);
       if (parts.every((x) => x.bare)) return plain(q.u);
       const inner = parts.map((x) => x.text).join('; ');
-      if (n.f === 'sqrt') return { text: `√(${inner})`, u: q.u, bare: false, prec: 9 };
-      if (n.f === 'cbrt') return { text: `∛(${inner})`, u: q.u, bare: false, prec: 9 };
-      return { text: `${n.f}(${inner})`, u: q.u, bare: false, prec: 9 };
+      const innerTex = parts.map((x) => x.tex).join(', ');
+      if (n.f === 'sqrt') return { text: `√(${inner})`, tex: `\\sqrt{${innerTex}}`, u: q.u, bare: false, prec: 9 };
+      if (n.f === 'cbrt') return { text: `∛(${inner})`, tex: `\\sqrt[3]{${innerTex}}`, u: q.u, bare: false, prec: 9 };
+      return { text: `${n.f}(${inner})`, tex: `\\operatorname{${n.f}}\\left(${innerTex}\\right)`, u: q.u, bare: false, prec: 9 };
     }
   }
   return plain({});
@@ -905,18 +989,40 @@ function unitLine(tree) {
   const w = unitWalk(tree);
   if (w.bare) return null;
   const res = uText(w.u) || '1';
+  const resTex = uTex(w.u) || '1';
   const name = uName(w.u);
+  const nameTex = name ? `\\text{${name}}` : null;
   const cleanExpr = w.text.trim();
+  const cleanTex = w.tex.trim();
+
+  let textOut = '';
+  let texOut = '';
+
   if (name && name !== res) {
     if (cleanExpr !== res && cleanExpr !== name) {
-      return `${cleanExpr} = ${res} = ${name}`;
+      textOut = `${cleanExpr} = ${res} = ${name}`;
+      texOut = `${cleanTex} = ${resTex} = ${nameTex}`;
+    } else {
+      textOut = `${cleanExpr} = ${name}`;
+      texOut = `${cleanTex} = ${nameTex}`;
     }
-    return `${cleanExpr} = ${name}`;
+  } else if (cleanExpr !== res) {
+    textOut = `${cleanExpr} = ${res}`;
+    texOut = `${cleanTex} = ${resTex}`;
+  } else {
+    textOut = res;
+    texOut = resTex;
   }
-  if (cleanExpr !== res) {
-    return `${cleanExpr} = ${res}`;
-  }
-  return res;
+
+  return createUnitTrace(textOut, `\\displaystyle ${texOut}`);
+}
+
+function createUnitTrace(text, tex) {
+  const s = new String(text);
+  s.text = text;
+  s.tex = tex;
+  s.toJSON = () => ({ text, tex });
+  return s;
 }
 
 // Domykanie nawiasów: brakujący otwierający dopisujemy najdalej w lewo
@@ -1030,10 +1136,35 @@ function insert(text) {
   livePreview();
 }
 
+function renderKatex(el, tex, fallbackHtml) {
+  if (!el) return;
+  if (typeof window !== 'undefined' && window.katex && tex) {
+    try {
+      window.katex.render(tex, el, {
+        throwOnError: false,
+        displayMode: false
+      });
+      return;
+    } catch (e) {
+      console.warn('KaTeX render error:', e);
+    }
+  }
+  el.innerHTML = fallbackHtml !== undefined ? fallbackHtml : (tex || '');
+}
+
+function notifyEmbedHeight() {
+  try {
+    if (window.parent && window.parent !== window) {
+      const h = document.documentElement.scrollHeight || document.body.scrollHeight;
+      window.parent.postMessage({ type: 'calc:resize', height: h }, '*');
+    }
+  } catch {}
+}
+
 function livePreview() {
   preview.classList.remove('err');
   const src = expr.value.trim();
-  if (!src) { preview.textContent = ''; return; }
+  if (!src) { preview.textContent = ''; notifyEmbedHeight(); return; }
   try {
     const { assign, v, u, src: full, units } = calc(src);
     const fr = toFraction(v);
@@ -1041,10 +1172,20 @@ function livePreview() {
     const shown = full !== src ? esc(full) + ' ' : '';
     let html = shown + (assign ? esc(assign) + ' ' : '') + '= ' + fmt(v).html + (uStr ? ' ' + esc(uStr) : '') + (fr ? ' = ' + fracHtml(fr) + (uStr ? ' ' + esc(uStr) : '') : '');
     if (units) {
-      html += `<div class="preview-units">${esc(units)}</div>`;
+      const txt = typeof units === 'object' && units ? units.text : units;
+      const tex = typeof units === 'object' && units ? units.tex : rawToTex(units);
+      html += `<div class="preview-units" data-tex="${esc(tex)}">${esc(txt)}</div>`;
     }
     preview.innerHTML = html;
-  } catch { preview.textContent = ''; }
+    const prevUnitsEl = preview.querySelector('.preview-units');
+    if (prevUnitsEl && window.katex) {
+      const tex = prevUnitsEl.getAttribute('data-tex');
+      if (tex) {
+        try { window.katex.render(tex, prevUnitsEl, { throwOnError: false, displayMode: false }); } catch {}
+      }
+    }
+    notifyEmbedHeight();
+  } catch { preview.textContent = ''; notifyEmbedHeight(); }
 }
 
 function showResult(label, v, u = {}, units = null) {
@@ -1058,7 +1199,13 @@ function showResult(label, v, u = {}, units = null) {
   
   const unitEl = $('unitTrack');
   if (unitEl) {
-    unitEl.textContent = units || '';
+    if (units) {
+      const txt = typeof units === 'object' && units ? units.text : units;
+      const tex = typeof units === 'object' && units ? units.tex : rawToTex(units);
+      renderKatex(unitEl, tex, esc(txt));
+    } else {
+      unitEl.innerHTML = '';
+    }
   }
   
   const parts = [];
@@ -1066,6 +1213,7 @@ function showResult(label, v, u = {}, units = null) {
   if (fr) parts.push('ułamek: ' + fracHtml(fr) + (uStr ? ' ' + esc(uStr) : ''));
   if (!(sig === 'auto' && f.text === exactText(v))) parts.push('dokładnie: ' + esc(exactText(v)) + (uStr ? ' ' + esc(uStr) : ''));
   resultRaw.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+  notifyEmbedHeight();
 }
 
 function run() {
@@ -1127,11 +1275,14 @@ function renderHist() {
     if (h.units) {
       const sub = document.createElement('div');
       sub.className = 'unit-sub mono';
-      sub.textContent = h.units;
+      const txt = typeof h.units === 'object' && h.units ? h.units.text : h.units;
+      const tex = typeof h.units === 'object' && h.units ? h.units.tex : rawToTex(h.units);
+      renderKatex(sub, tex, esc(txt));
       li.firstChild.append(sub);
     }
     ol.append(li);
   });
+  notifyEmbedHeight();
 }
 
 // Wstawia działanie z historii w miejsce kursora, w nawiasie, jeśli trzeba.
@@ -1325,6 +1476,25 @@ document.addEventListener('keydown', (e) => {
   if (e.key.length === 1 || e.key === 'Enter' || e.key === 'Backspace') { expr.focus(); }
 });
 
+// ---- parametry i tryb embed ----
+const urlParams = new URLSearchParams((typeof location !== 'undefined' && location.search) || (typeof window !== 'undefined' && window.location && window.location.search) || '');
+const isEmbed = urlParams.get('embed') === '1' || (typeof window !== 'undefined' && window.top && window.self && window.self !== window.top);
+if (isEmbed) {
+  document.documentElement.classList.add('embedded');
+  if (urlParams.get('bg') === 'transparent') {
+    document.documentElement.setAttribute('data-bg', 'transparent');
+  }
+  if (urlParams.get('hide_keys') === '1') {
+    document.documentElement.setAttribute('data-hide-keys', '1');
+  }
+  if (urlParams.get('hide_hist') === '1') {
+    document.documentElement.setAttribute('data-hide-hist', '1');
+  }
+}
+if (urlParams.get('theme') && THEMES.includes(urlParams.get('theme'))) {
+  uiTheme = urlParams.get('theme');
+}
+
 // ---- start ----
 applyTheme();
 renderModes();
@@ -1332,7 +1502,27 @@ renderHist();
 renderVars();
 renderConsts();
 if (hist.length) showResult(hist[0].e + ' =', hist[0].v, hist[0].u, hist[0].units);
-if (fine) expr.focus();
+
+const initialExpr = urlParams.get('expr');
+if (initialExpr) {
+  expr.value = initialExpr;
+  run();
+} else if (fine) {
+  expr.focus();
+}
+
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('resize', notifyEmbedHeight);
+}
+setTimeout(notifyEmbedHeight, 100);
+
+window.onKatexLoaded = () => {
+  livePreview();
+  if (hist.length) {
+    showResult(lastExpr.textContent || (hist[0].e + ' ='), hist[0].v, hist[0].u, hist[0].units);
+    renderHist();
+  }
+};
 })();
 </script>
 </body>
