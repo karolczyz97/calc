@@ -1019,11 +1019,7 @@ function unitLine(tree) {
 }
 
 function createUnitTrace(text, tex) {
-  const s = new String(text);
-  s.text = text;
-  s.tex = tex;
-  s.toJSON = () => ({ text, tex });
-  return s;
+  return { text, tex };
 }
 
 // Domykanie nawiasów: brakujący otwierający dopisujemy najdalej w lewo
@@ -1173,9 +1169,7 @@ function livePreview() {
     const shown = full !== src ? esc(full) + ' ' : '';
     let html = shown + (assign ? esc(assign) + ' ' : '') + '= ' + fmt(v).html + (uStr ? ' ' + esc(uStr) : '') + (fr ? ' = ' + fracHtml(fr) + (uStr ? ' ' + esc(uStr) : '') : '');
     if (units) {
-      const txt = typeof units === 'object' && units ? units.text : units;
-      const tex = typeof units === 'object' && units ? units.tex : rawToTex(units);
-      html += `<div class="preview-units" data-tex="${esc(tex)}">${esc(txt)}</div>`;
+      html += `<div class="preview-units" data-tex="${esc(units.tex)}">${esc(units.text)}</div>`;
     }
     preview.innerHTML = html;
     const prevUnitsEl = preview.querySelector('.preview-units');
@@ -1201,9 +1195,7 @@ function showResult(label, v, u = {}, units = null) {
   const unitEl = $('unitTrack');
   if (unitEl) {
     if (units) {
-      const txt = typeof units === 'object' && units ? units.text : units;
-      const tex = typeof units === 'object' && units ? units.tex : rawToTex(units);
-      renderKatex(unitEl, tex, esc(txt));
+      renderKatex(unitEl, units.tex, esc(units.text));
     } else {
       unitEl.innerHTML = '';
     }
@@ -1276,9 +1268,7 @@ function renderHist() {
     if (h.units) {
       const sub = document.createElement('div');
       sub.className = 'unit-sub mono';
-      const txt = typeof h.units === 'object' && h.units ? h.units.text : h.units;
-      const tex = typeof h.units === 'object' && h.units ? h.units.tex : rawToTex(h.units);
-      renderKatex(sub, tex, esc(txt));
+      renderKatex(sub, h.units.tex, esc(h.units.text));
       li.firstChild.append(sub);
     }
     ol.append(li);
