@@ -17,28 +17,22 @@
   --line: rgba(255,255,255,.09);
   --eq-bg: #ececec;
   --eq-text: #1b1b1b;
+  --eq-line: rgba(0,0,0,.15);
   --err: #ffb4a8;
   --hint: rgba(0,0,0,.78);
   --shadow: 0 0 6px rgba(0,0,0,.35);
   color-scheme: dark;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #161616; --panel: #1e1e1e; --key: #272727; --key-hi: #323232; --key-fn: #222;
-    --text: #e6e6e6; --muted: #9c9c9c; --faint: #6f6f6f; --line: rgba(255,255,255,.07);
-    --eq-bg: #d9d9d9; --eq-text: #121212; --err: #ff8a7a; --shadow: none;
-  }
-}
 :root[data-theme="dark"] {
   --bg: #161616; --panel: #1e1e1e; --key: #272727; --key-hi: #323232; --key-fn: #222;
   --text: #e6e6e6; --muted: #9c9c9c; --faint: #6f6f6f; --line: rgba(255,255,255,.07);
-  --eq-bg: #d9d9d9; --eq-text: #121212; --err: #ff8a7a; --shadow: none;
+  --eq-bg: #2f3439; --eq-text: #cfe0f5; --eq-line: #4a5460; --err: #ff8a7a; --shadow: none;
 }
 /* Motyw Gemini – kolory odczytane z gemini.google.com */
 :root[data-theme="gemini"] {
   --bg: #0f0f0f; --panel: #1b1b1b; --key: #282a2c; --key-hi: #333537; --key-fn: #1e1f20;
   --text: #e3e3e3; --muted: #c4c7c5; --faint: #9a9b9c; --line: #333537;
-  --eq-bg: #a8c7fa; --eq-text: #062e6f; --err: #f2b8b5; --hint: #282a2c; --shadow: none;
+  --eq-bg: #1f3760; --eq-text: #a8c7fa; --eq-line: #3b5a8c; --err: #f2b8b5; --hint: #282a2c; --shadow: none;
 }
 :root[data-theme="gemini"] body {
   font-family: "Google Sans Flex", "Google Sans", "Helvetica Neue", system-ui, sans-serif;
@@ -54,6 +48,11 @@ html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--te
 body { font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .mono { font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+* { scrollbar-width: thin; scrollbar-color: var(--key) transparent; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--key); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--key-hi); background-clip: content-box; }
 
 main {
   max-width: 1080px; margin: 0 auto; padding: 14px;
@@ -93,7 +92,8 @@ main {
 }
 .keys button.fn { background: var(--key-fn); font-size: 14px; color: var(--muted); }
 .keys button:hover { background: var(--key-hi); }
-.keys button.eq { background: var(--eq-bg); color: var(--eq-text); font-weight: 600; }
+.keys button.eq { background: var(--eq-bg); color: var(--eq-text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--eq-line); }
+.keys button.eq:hover { filter: brightness(1.15); }
 
 /* ---- listy: historia, zmienne, stałe – jeden kompaktowy styl ---- */
 .hist { padding: 2px 0 6px; }
@@ -119,7 +119,15 @@ main {
   background: var(--key-fn); color: var(--text); outline: none; font: inherit;
 }
 .consts { overflow: auto; padding-bottom: 6px; }
-.group { padding: 6px 12px 2px; font-size: 11px; color: var(--faint); }
+.group {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 12px 5px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--faint); background: none; border: 0; border-top: 1px solid var(--line); text-align: left;
+}
+.group:hover { color: var(--text); background: var(--key-fn); }
+.group .caret { width: 10px; font-size: 10px; }
+.group .count { margin-left: auto; opacity: .7; }
+.group.open { color: var(--muted); }
 
 .row {
   display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
@@ -172,7 +180,7 @@ main {
              placeholder="np. sqrt(2*g*h)  albo  v = 12">
       <div id="preview" class="mono"></div>
       <div id="lastExpr" class="mono"></div>
-      <div id="result" class="mono" title="Kliknij, żeby skopiować">0</div>
+      <div id="result" class="mono" title="Kliknij, żeby wstawić do działania · dwuklik kopiuje">0</div>
       <div id="resultRaw" class="mono"></div>
     </div>
 
@@ -214,7 +222,7 @@ main {
     <b>Enter</b> oblicz · <b>↑ ↓</b> historia · <b>Esc</b> wyczyść ·
     część dziesiętna po przecinku <code>9,81</code>, argumenty oddziel średnikiem <code>root(8; 3)</code> ·
     zmienne: <code>v = 12</code>, potem <code>v^2/2</code> ·
-    mnożenie można pomijać: <code>2πr</code>, <code>m_e c^2</code>
+    mnożenie można pomijać: <code>2πr</code>, <code>me c^2</code>
   </div>
   </section>
 
@@ -243,51 +251,120 @@ const CONSTS = [
   ['G', 'G', 'stała grawitacji', 6.67430e-11, 'N·m²/kg²', 'Podstawowe'],
   ['h', 'h', 'stała Plancka', 6.62607015e-34, 'J·s', 'Podstawowe'],
   ['hbar', 'ħ', 'zredukowana stała Plancka (h/2π)', 1.054571817e-34, 'J·s', 'Podstawowe', ['ħ']],
-  ['q_e', 'e', 'ładunek elementarny', 1.602176634e-19, 'C', 'Podstawowe'],
-  ['k_B', 'k<sub>B</sub>', 'stała Boltzmanna', 1.380649e-23, 'J/K', 'Podstawowe'],
-  ['N_A', 'N<sub>A</sub>', 'liczba Avogadra', 6.02214076e23, '1/mol', 'Podstawowe'],
+  ['qe', 'e', 'ładunek elementarny', 1.602176634e-19, 'C', 'Podstawowe', ['q_e']],
+  ['kB', 'k<sub>B</sub>', 'stała Boltzmanna', 1.380649e-23, 'J/K', 'Podstawowe', ['k_B']],
+  ['NA', 'N<sub>A</sub>', 'liczba Avogadra', 6.02214076e23, '1/mol', 'Podstawowe', ['N_A']],
   ['R', 'R', 'uniwersalna stała gazowa', 8.314462618, 'J/(mol·K)', 'Podstawowe'],
 
   ['g', 'g', 'przyspieszenie ziemskie (szkolne)', 9.81, 'm/s²', 'Mechanika'],
-  ['g_n', 'g<sub>n</sub>', 'przyspieszenie ziemskie normalne', 9.80665, 'm/s²', 'Mechanika'],
-  ['v_dz', 'v<sub>dź</sub>', 'prędkość dźwięku w powietrzu (≈20 °C)', 343, 'm/s', 'Mechanika'],
-  ['rho_w', 'ρ<sub>w</sub>', 'gęstość wody', 1000, 'kg/m³', 'Mechanika'],
-  ['rho_p', 'ρ<sub>p</sub>', 'gęstość powietrza (0 °C, 1 atm)', 1.29, 'kg/m³', 'Mechanika'],
+  ['gn', 'g<sub>n</sub>', 'przyspieszenie ziemskie normalne', 9.80665, 'm/s²', 'Mechanika', ['g_n']],
+  ['vdz', 'v<sub>dź</sub>', 'prędkość dźwięku w powietrzu (≈20 °C)', 343, 'm/s', 'Mechanika', ['v_dz']],
+  ['rhow', 'ρ<sub>w</sub>', 'gęstość wody', 1000, 'kg/m³', 'Mechanika', ['rho_w']],
+  ['rhop', 'ρ<sub>p</sub>', 'gęstość powietrza (0 °C, 1 atm)', 1.29, 'kg/m³', 'Mechanika', ['rho_p']],
+  ['rholod', 'ρ<sub>lodu</sub>', 'gęstość lodu', 917, 'kg/m³', 'Mechanika'],
+  ['rhoHg', 'ρ<sub>Hg</sub>', 'gęstość rtęci', 13550, 'kg/m³', 'Mechanika'],
+  ['rhoFe', 'ρ<sub>Fe</sub>', 'gęstość żelaza', 7860, 'kg/m³', 'Mechanika'],
+  ['rhoAlu', 'ρ<sub>Al</sub>', 'gęstość aluminium', 2700, 'kg/m³', 'Mechanika'],
 
+  ['muB', 'μ<sub>B</sub>', 'magneton Bohra', 9.2740100783e-24, 'J/T', 'Elektryczność i magnetyzm', ['μB']],
+  ['rhoCu', 'ρ<sub>Cu</sub>', 'opór właściwy miedzi (20 °C)', 1.68e-8, 'Ω·m', 'Elektryczność i magnetyzm'],
+  ['rhoAl', 'ρ<sub>Al</sub>', 'opór właściwy aluminium (20 °C)', 2.65e-8, 'Ω·m', 'Elektryczność i magnetyzm'],
   ['k', 'k', 'stała Coulomba 1/(4πε₀)', 8.9875517923e9, 'N·m²/C²', 'Elektryczność i magnetyzm'],
+
   ['eps0', 'ε<sub>0</sub>', 'przenikalność elektryczna próżni', 8.8541878128e-12, 'F/m', 'Elektryczność i magnetyzm', ['ε0', 'ε_0']],
   ['mu0', 'μ<sub>0</sub>', 'przenikalność magnetyczna próżni', 1.25663706212e-6, 'N/A²', 'Elektryczność i magnetyzm', ['μ0', 'μ_0']],
 
-  ['T_0', 'T<sub>0</sub>', 'temperatura 0 °C', 273.15, 'K', 'Termodynamika'],
-  ['p_0', 'p<sub>0</sub>', 'ciśnienie normalne', 101325, 'Pa', 'Termodynamika'],
-  ['c_w', 'c<sub>w</sub>', 'ciepło właściwe wody', 4190, 'J/(kg·K)', 'Termodynamika'],
-  ['c_l', 'c<sub>l</sub>', 'ciepło właściwe lodu', 2100, 'J/(kg·K)', 'Termodynamika'],
-  ['L_t', 'L<sub>t</sub>', 'ciepło topnienia lodu', 3.34e5, 'J/kg', 'Termodynamika'],
-  ['L_p', 'L<sub>p</sub>', 'ciepło parowania wody (100 °C)', 2.26e6, 'J/kg', 'Termodynamika'],
+  ['T0', 'T<sub>0</sub>', 'temperatura 0 °C', 273.15, 'K', 'Termodynamika', ['T_0']],
+  ['p0', 'p<sub>0</sub>', 'ciśnienie normalne', 101325, 'Pa', 'Termodynamika', ['p_0']],
+  ['cw', 'c<sub>w</sub>', 'ciepło właściwe wody', 4190, 'J/(kg·K)', 'Termodynamika', ['c_w']],
+  ['cl', 'c<sub>l</sub>', 'ciepło właściwe lodu', 2100, 'J/(kg·K)', 'Termodynamika', ['c_l']],
+  ['Lt', 'L<sub>t</sub>', 'ciepło topnienia lodu', 3.34e5, 'J/kg', 'Termodynamika', ['L_t']],
+  ['Lp', 'L<sub>p</sub>', 'ciepło parowania wody (100 °C)', 2.26e6, 'J/kg', 'Termodynamika', ['L_p']],
+  ['cFe', 'c<sub>Fe</sub>', 'ciepło właściwe żelaza', 450, 'J/(kg·K)', 'Termodynamika'],
+  ['cAl', 'c<sub>Al</sub>', 'ciepło właściwe aluminium', 900, 'J/(kg·K)', 'Termodynamika'],
+  ['cCu', 'c<sub>Cu</sub>', 'ciepło właściwe miedzi', 380, 'J/(kg·K)', 'Termodynamika'],
+  ['cp', 'c<sub>p</sub>', 'ciepło właściwe powietrza (stałe p)', 1005, 'J/(kg·K)', 'Termodynamika'],
+  ['Rs', 'R<sub>s</sub>', 'stała gazowa powietrza', 287, 'J/(kg·K)', 'Termodynamika'],
   ['sigma', 'σ', 'stała Stefana–Boltzmanna', 5.670374419e-8, 'W/(m²·K⁴)', 'Termodynamika', ['σ']],
-  ['b_W', 'b', 'stała Wiena', 2.897771955e-3, 'm·K', 'Termodynamika'],
+  ['bW', 'b', 'stała Wiena', 2.897771955e-3, 'm·K', 'Termodynamika', ['b_W']],
 
-  ['m_e', 'm<sub>e</sub>', 'masa elektronu', 9.1093837015e-31, 'kg', 'Atom i kwanty'],
-  ['m_p', 'm<sub>p</sub>', 'masa protonu', 1.67262192369e-27, 'kg', 'Atom i kwanty'],
-  ['m_n', 'm<sub>n</sub>', 'masa neutronu', 1.67492749804e-27, 'kg', 'Atom i kwanty'],
+  ['me', 'm<sub>e</sub>', 'masa elektronu', 9.1093837015e-31, 'kg', 'Atom i kwanty', ['m_e']],
+  ['mp', 'm<sub>p</sub>', 'masa protonu', 1.67262192369e-27, 'kg', 'Atom i kwanty', ['m_p']],
+  ['mn', 'm<sub>n</sub>', 'masa neutronu', 1.67492749804e-27, 'kg', 'Atom i kwanty', ['m_n']],
   ['u', 'u', 'atomowa jednostka masy', 1.66053906660e-27, 'kg', 'Atom i kwanty'],
   ['eV', 'eV', 'elektronowolt', 1.602176634e-19, 'J', 'Atom i kwanty'],
-  ['R_H', 'R<sub>H</sub>', 'stała Rydberga', 1.0973731568e7, '1/m', 'Atom i kwanty'],
-  ['a_0', 'a<sub>0</sub>', 'promień Bohra', 5.29177210903e-11, 'm', 'Atom i kwanty'],
+  ['RH', 'R<sub>H</sub>', 'stała Rydberga', 1.0973731568e7, '1/m', 'Atom i kwanty', ['R_H']],
+  ['a0', 'a<sub>0</sub>', 'promień Bohra', 5.29177210903e-11, 'm', 'Atom i kwanty', ['a_0']],
+  ['alpha', 'α', 'stała struktury subtelnej', 7.2973525693e-3, '', 'Atom i kwanty', ['α']],
+  ['lC', 'λ<sub>C</sub>', 'komptonowska długość fali elektronu', 2.42631023867e-12, 'm', 'Atom i kwanty'],
+  ['E1', 'E<sub>1</sub>', 'energia jonizacji wodoru (13,6 eV)', 2.1798723611e-18, 'J', 'Atom i kwanty'],
 
-  ['M_Z', 'M<sub>Z</sub>', 'masa Ziemi', 5.972e24, 'kg', 'Astronomia'],
-  ['R_Z', 'R<sub>Z</sub>', 'średni promień Ziemi', 6.371e6, 'm', 'Astronomia'],
-  ['M_S', 'M<sub>S</sub>', 'masa Słońca', 1.989e30, 'kg', 'Astronomia'],
-  ['R_S', 'R<sub>S</sub>', 'promień Słońca', 6.957e8, 'm', 'Astronomia'],
-  ['M_K', 'M<sub>K</sub>', 'masa Księżyca', 7.342e22, 'kg', 'Astronomia'],
-  ['R_K', 'R<sub>K</sub>', 'promień Księżyca', 1.737e6, 'm', 'Astronomia'],
-  ['d_ZK', 'd<sub>ZK</sub>', 'średnia odległość Ziemia–Księżyc', 3.844e8, 'm', 'Astronomia'],
+  ['MZ', 'M<sub>Z</sub>', 'masa Ziemi', 5.972e24, 'kg', 'Astronomia', ['M_Z']],
+  ['RZ', 'R<sub>Z</sub>', 'średni promień Ziemi', 6.371e6, 'm', 'Astronomia', ['R_Z']],
+  ['MS', 'M<sub>S</sub>', 'masa Słońca', 1.989e30, 'kg', 'Astronomia', ['M_S']],
+  ['RS', 'R<sub>S</sub>', 'promień Słońca', 6.957e8, 'm', 'Astronomia', ['R_S']],
+  ['MK', 'M<sub>K</sub>', 'masa Księżyca', 7.342e22, 'kg', 'Astronomia', ['M_K']],
+  ['RK', 'R<sub>K</sub>', 'promień Księżyca', 1.737e6, 'm', 'Astronomia', ['R_K']],
+  ['dZK', 'd<sub>ZK</sub>', 'średnia odległość Ziemia–Księżyc', 3.844e8, 'm', 'Astronomia', ['d_ZK']],
   ['AU', 'au', 'jednostka astronomiczna', 1.495978707e11, 'm', 'Astronomia', ['au']],
   ['ly', 'ly', 'rok świetlny', 9.4607304725808e15, 'm', 'Astronomia'],
   ['pc', 'pc', 'parsek', 3.0856775814914e16, 'm', 'Astronomia'],
+  ['gK', 'g<sub>K</sub>', 'przyspieszenie na Księżycu', 1.62, 'm/s²', 'Astronomia'],
+  ['gM', 'g<sub>M</sub>', 'przyspieszenie na Marsie', 3.71, 'm/s²', 'Astronomia'],
+  ['TZ', 'T<sub>Z</sub>', 'okres obiegu Ziemi wokół Słońca', 3.1557e7, 's', 'Astronomia'],
+  ['Td', 'T<sub>d</sub>', 'doba gwiazdowa', 86164, 's', 'Astronomia'],
+
+
+  // Układ Słoneczny: masy, promienie, wielkie półosie orbit i okresy obiegu
+  ['MZie', 'M<sub>Ziemi</sub>', 'masa Ziemi', 5.972e24, 'kg', 'Układ Słoneczny', ['MZ2']],
+  ['RZie', 'R<sub>Ziemi</sub>', 'promień Ziemi', 6.371e6, 'm', 'Układ Słoneczny'],
+  ['aZie', 'a<sub>Ziemi</sub>', 'promień orbity Ziemi', 1.495978707e11, 'm', 'Układ Słoneczny'],
+  ['TZie', 'T<sub>Ziemi</sub>', 'okres obiegu Ziemi', 3.1557e7, 's', 'Układ Słoneczny'],
+  ['MMer', 'M<sub>Merkury</sub>', 'masa Merkurego', 3.301e+23, 'kg', 'Układ Słoneczny'],
+  ['RMer', 'R<sub>Merkury</sub>', 'promień Merkurego', 2439700.0, 'm', 'Układ Słoneczny'],
+  ['aMer', 'a<sub>Merkury</sub>', 'promień orbity Merkurego', 57910000000.0, 'm', 'Układ Słoneczny'],
+  ['TMer', 'T<sub>Merkury</sub>', 'okres obiegu Merkurego', 7600500.0, 's', 'Układ Słoneczny'],
+  ['MWen', 'M<sub>Wenus</sub>', 'masa Wenus', 4.867e+24, 'kg', 'Układ Słoneczny'],
+  ['RWen', 'R<sub>Wenus</sub>', 'promień Wenus', 6051800.0, 'm', 'Układ Słoneczny'],
+  ['aWen', 'a<sub>Wenus</sub>', 'promień orbity Wenus', 108210000000.0, 'm', 'Układ Słoneczny'],
+  ['TWen', 'T<sub>Wenus</sub>', 'okres obiegu Wenus', 19414000.0, 's', 'Układ Słoneczny'],
+  ['MMar', 'M<sub>Mars</sub>', 'masa Marsa', 6.417e+23, 'kg', 'Układ Słoneczny'],
+  ['RMar', 'R<sub>Mars</sub>', 'promień Marsa', 3389500.0, 'm', 'Układ Słoneczny'],
+  ['aMar', 'a<sub>Mars</sub>', 'promień orbity Marsa', 227920000000.0, 'm', 'Układ Słoneczny'],
+  ['TMar', 'T<sub>Mars</sub>', 'okres obiegu Marsa', 59355000.0, 's', 'Układ Słoneczny'],
+  ['MJow', 'M<sub>Jowisz</sub>', 'masa Jowisza', 1.898e+27, 'kg', 'Układ Słoneczny'],
+  ['RJow', 'R<sub>Jowisz</sub>', 'promień Jowisza', 69911000.0, 'm', 'Układ Słoneczny'],
+  ['aJow', 'a<sub>Jowisz</sub>', 'promień orbity Jowisza', 778500000000.0, 'm', 'Układ Słoneczny'],
+  ['TJow', 'T<sub>Jowisz</sub>', 'okres obiegu Jowisza', 374350000.0, 's', 'Układ Słoneczny'],
+  ['MSat', 'M<sub>Saturn</sub>', 'masa Saturna', 5.683e+26, 'kg', 'Układ Słoneczny'],
+  ['RSat', 'R<sub>Saturn</sub>', 'promień Saturna', 58232000.0, 'm', 'Układ Słoneczny'],
+  ['aSat', 'a<sub>Saturn</sub>', 'promień orbity Saturna', 1433500000000.0, 'm', 'Układ Słoneczny'],
+  ['TSat', 'T<sub>Saturn</sub>', 'okres obiegu Saturna', 929290000.0, 's', 'Układ Słoneczny'],
+  ['MUra', 'M<sub>Uran</sub>', 'masa Urana', 8.681e+25, 'kg', 'Układ Słoneczny'],
+  ['RUra', 'R<sub>Uran</sub>', 'promień Urana', 25362000.0, 'm', 'Układ Słoneczny'],
+  ['aUra', 'a<sub>Uran</sub>', 'promień orbity Urana', 2872500000000.0, 'm', 'Układ Słoneczny'],
+  ['TUra', 'T<sub>Uran</sub>', 'okres obiegu Urana', 2651200000.0, 's', 'Układ Słoneczny'],
+  ['MNep', 'M<sub>Neptun</sub>', 'masa Neptuna', 1.024e+26, 'kg', 'Układ Słoneczny'],
+  ['RNep', 'R<sub>Neptun</sub>', 'promień Neptuna', 24622000.0, 'm', 'Układ Słoneczny'],
+  ['aNep', 'a<sub>Neptun</sub>', 'promień orbity Neptuna', 4495100000000.0, 'm', 'Układ Słoneczny'],
+  ['TNep', 'T<sub>Neptun</sub>', 'okres obiegu Neptuna', 5200400000.0, 's', 'Układ Słoneczny'],
+  ['vZ', 'v<sub>Z</sub>', 'prędkość orbitalna Ziemi', 29780, 'm/s', 'Układ Słoneczny'],
+  ['v1Z', 'v<sub>I</sub>', 'pierwsza prędkość kosmiczna', 7910, 'm/s', 'Układ Słoneczny'],
+  ['v2Z', 'v<sub>II</sub>', 'druga prędkość kosmiczna (ucieczki)', 11186, 'm/s', 'Układ Słoneczny'],
+  ['LS', 'L<sub>S</sub>', 'moc promieniowania Słońca', 3.828e26, 'W', 'Układ Słoneczny'],
+  ['S0', 'S<sub>0</sub>', 'stała słoneczna (na orbicie Ziemi)', 1361, 'W/m²', 'Układ Słoneczny'],
+
+  ['kWh', 'kWh', 'kilowatogodzina', 3.6e6, 'J', 'Przeliczniki'],
+  ['cal', 'cal', 'kaloria', 4.1868, 'J', 'Przeliczniki'],
+  ['bar', 'bar', 'bar', 1e5, 'Pa', 'Przeliczniki'],
+  ['atm', 'atm', 'atmosfera', 101325, 'Pa', 'Przeliczniki'],
+  ['mmHg', 'mmHg', 'milimetr słupa rtęci (tor)', 133.322, 'Pa', 'Przeliczniki'],
+  ['kmh', 'km/h', 'kilometr na godzinę (72 kmh = 20 m/s)', 1 / 3.6, 'm/s', 'Przeliczniki'],
+  ['KM', 'KM', 'koń mechaniczny', 735.49875, 'W', 'Przeliczniki'],
 
   ['pi', 'π', 'liczba pi', Math.PI, '', 'Matematyka', ['π']],
   ['e', 'e', 'liczba Eulera (podstawa ln)', Math.E, '', 'Matematyka'],
+  ['phi', 'φ', 'złoty podział', (1 + Math.sqrt(5)) / 2, '', 'Matematyka', ['φ']],
 ];
 const CONST = {};
 for (const [id, sym, name, value, unit, group, aliases = []] of CONSTS) {
@@ -510,12 +587,30 @@ function ev(n) {
   throw err('Błąd wyrażenia');
 }
 
-function calc(src) {
+// Domykanie nawiasów: brakujący otwierający dopisujemy najdalej w lewo,
+// czyli 5+2)/3 czytamy jako (5+2)/3, a 2/(3+2 jako 2/(3+2).
+function balance(src) {
+  let depth = 0, need = 0;
+  for (const ch of src) {
+    if (ch === '(') depth++;
+    else if (ch === ')') { depth > 0 ? depth-- : need++; }
+  }
+  let out = src;
+  if (need) {
+    const m = /^\s*[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03FF]*\s*=\s*/.exec(out);
+    const at = m ? m[0].length : 0;
+    out = out.slice(0, at) + '('.repeat(need) + out.slice(at);
+  }
+  return out + ')'.repeat(depth);
+}
+
+function calc(raw) {
+  const src = balance(raw);
   const { assign, tree } = parse(tokenize(src));
   const v = ev(tree);
   if (Number.isNaN(v)) throw err('Wynik nieokreślony');
   if (!Number.isFinite(v)) throw err('Wynik poza zakresem');
-  return { assign, v };
+  return { assign, v, src };
 }
 
 // ================= Formatowanie =================
@@ -609,9 +704,10 @@ function livePreview() {
   const src = expr.value.trim();
   if (!src) { preview.textContent = ''; return; }
   try {
-    const { assign, v } = calc(src);
+    const { assign, v, src: full } = calc(src);
     const fr = toFraction(v);
-    preview.innerHTML = (assign ? esc(assign) + ' ' : '') + '= ' + fmt(v).html + (fr ? ' = ' + fracHtml(fr) : '');
+    const shown = full !== src ? esc(full) + ' ' : '';
+    preview.innerHTML = shown + (assign ? esc(assign) + ' ' : '') + '= ' + fmt(v).html + (fr ? ' = ' + fracHtml(fr) : '');
   } catch { preview.textContent = ''; }
 }
 
@@ -619,7 +715,7 @@ function showResult(label, v) {
   lastExpr.textContent = label;
   const f = fmt(v);
   result.innerHTML = f.html;
-  result.dataset.copy = f.text;
+  result.dataset.copy = exactText(v);
   const parts = [];
   const fr = toFraction(v);
   if (fr) parts.push('ułamek: ' + fracHtml(fr));
@@ -631,14 +727,14 @@ function run() {
   const src = expr.value.trim();
   if (!src) return;
   try {
-    const { assign, v } = calc(src);
+    const { assign, v, src: full } = calc(src);
     if (assign) { vars[assign] = v; store.set('vars', vars); renderVars(); }
     ans = v;
-    hist.unshift({ e: src, v });
+    hist.unshift({ e: full, v });
     hist = hist.slice(0, 100);
     store.set('hist', hist);
     histPos = -1;
-    showResult(src + ' =', v);
+    showResult(full + ' =', v);
     expr.value = '';
     lastSel = null;
     preview.textContent = '';
@@ -650,28 +746,43 @@ function run() {
   }
 }
 
+// Wiersz listy: dwie kolumny tekstu, opcjonalnie klikalne.
+function row(cls, left, right, onLeft, onRight) {
+  const el = document.createElement('li');
+  el.className = cls;
+  const a = document.createElement('span');
+  a.className = 'e mono';
+  const b = document.createElement('span');
+  b.className = 'r mono';
+  if (typeof left === 'string') a.textContent = left; else a.innerHTML = left.html;
+  if (typeof right === 'string') b.textContent = right; else b.innerHTML = right.html;
+  if (onLeft) a.onclick = onLeft;
+  if (onRight) b.onclick = onRight;
+  el.append(a, b);
+  return el;
+}
+
 function renderHist() {
   const ol = $('hist');
   ol.replaceChildren();
   $('histEmpty').hidden = hist.length > 0;
   hist.forEach((h) => {
-    const li = document.createElement('li');
-    const e = document.createElement('span');
-    e.className = 'e mono'; e.textContent = h.e; e.title = h.e + '  (kliknij, żeby wstawić)';
-    e.onclick = () => {
-      let t = h.e;
-      const m = /^\s*[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03FF]*\s*=(.*)$/.exec(t);
-      if (m) t = m[1].trim();                          // z "v = 12*3" wstawiamy tylko "12*3"
-      const simple = /^[A-Za-z0-9_,.\u0370-\u03FF]+$/.test(t);
-      if (expr.value.trim() && !simple) t = '(' + t + ')'; // w środku innego działania – w nawiasie
-      insert(t);
-    };
-    const r = document.createElement('span');
-    r.className = 'r mono'; r.innerHTML = '= ' + fmt(h.v).html; r.title = 'Wstaw wynik w miejsce kursora';
-    r.onclick = () => insert(exactText(h.v));
-    li.append(e, r);
+    const li = row('', h.e, { html: '= ' + fmt(h.v).html },
+      () => insertExpr(h.e),
+      () => insert(exactText(h.v)));
+    li.firstChild.title = h.e + '  (kliknij, żeby wstawić)';
+    li.lastChild.title = 'Wstaw wynik w miejsce kursora';
     ol.append(li);
   });
+}
+
+// Wstawia działanie z historii w miejsce kursora, w nawiasie, jeśli trzeba.
+function insertExpr(text) {
+  const m = /^\s*[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03FF]*\s*=(.*)$/.exec(text);
+  let t = m ? m[1].trim() : text;                      // z "v = 12*3" bierzemy "12*3"
+  const simple = /^[A-Za-z0-9_,.\u0370-\u03FF]+$/.test(t);
+  if (expr.value.trim() && !simple) t = '(' + t + ')';
+  insert(t);
 }
 
 function renderVars() {
@@ -700,40 +811,61 @@ function renderVars() {
 }
 
 const norm = (s) => s.toLowerCase().replace(/ł/g, 'l').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+// Zwinięte grupy pamiętamy między sesjami; podczas szukania i tak pokazujemy wszystko.
+let closed = new Set(store.get('closedGroups', ['Mechanika', 'Elektryczność i magnetyzm', 'Termodynamika', 'Atom i kwanty', 'Astronomia', 'Układ Słoneczny', 'Przeliczniki', 'Matematyka']));
+
+function constRow(c) {
+  const b = document.createElement('button');
+  b.className = 'row';
+  b.title = `Wstaw: ${c.id}`;
+  const up = /^(eV|au|ly|pc|kWh|cal|bar|atm|mmHg|km\/h|KM)$/.test(c.sym) ? ' up' : '';
+  b.innerHTML = `<div class="top"><span class="sym${up}">${c.sym}</span><span class="name">${esc(c.name)}</span></div>
+    <div class="bottom"><span class="id mono">${esc(c.id)}</span><span class="val mono">${fmt(c.value, 'auto').html}${c.unit ? ' ' + esc(c.unit) : ''}</span></div>`;
+  b.addEventListener('pointerdown', (e) => e.preventDefault());
+  b.onclick = () => insert(c.id);
+  return b;
+}
+
 function renderConsts() {
   const q = norm($('search').value.trim());
   const box = $('consts');
   box.replaceChildren();
-  let lastGroup = null;
+
+  const groups = new Map();
   for (const [id] of CONSTS) {
     const c = CONST[id];
     if (q && !norm(`${c.name} ${c.id} ${c.group} ${c.sym.replace(/<[^>]+>/g, '')}`).includes(q)) continue;
-    if (c.group !== lastGroup) {
-      const g = document.createElement('div');
-      g.className = 'group'; g.textContent = c.group;
-      box.append(g);
-      lastGroup = c.group;
-    }
-    const b = document.createElement('button');
-    b.className = 'row';
-    b.title = `Wstaw: ${c.id}`;
-    const up = /^(eV|au|ly|pc)$/.test(c.id) ? ' up' : '';
-    b.innerHTML = `<div class="top"><span class="sym${up}">${c.sym}</span><span class="name">${esc(c.name)}</span></div>
-      <div class="bottom"><span class="id mono">${esc(c.id)}</span><span class="val mono">${fmt(c.value, 'auto').html}${c.unit ? ' ' + esc(c.unit) : ''}</span></div>`;
-    b.addEventListener('pointerdown', (e) => e.preventDefault());
-    b.onclick = () => insert(c.id);
-    box.append(b);
+    if (!groups.has(c.group)) groups.set(c.group, []);
+    groups.get(c.group).push(c);
   }
-  if (!box.children.length) box.innerHTML = '<div class="empty">Nic nie znaleziono.</div>';
+  if (!groups.size) { box.innerHTML = '<div class="empty">Nic nie znaleziono.</div>'; return; }
+
+  for (const [name, list] of groups) {
+    const open = !!q || !closed.has(name);
+    const head = document.createElement('button');
+    head.className = 'group' + (open ? ' open' : '');
+    head.innerHTML = `<span class="caret">${open ? '▾' : '▸'}</span><span>${esc(name)}</span><span class="count">${list.length}</span>`;
+    head.onclick = () => {
+      if (q) return;                       // w trakcie szukania grupy zostają otwarte
+      closed.has(name) ? closed.delete(name) : closed.add(name);
+      store.set('closedGroups', [...closed]);
+      renderConsts();
+    };
+    box.append(head);
+    if (open) for (const c of list) box.append(constRow(c));
+  }
 }
 
 const THEMES = ['auto', 'dark', 'gemini'];
 const THEME_ICON = { auto: '◐', dark: '●', gemini: '✦' };
+const systemDark = matchMedia('(prefers-color-scheme: dark)');
 function applyTheme() {
-  if (uiTheme === 'auto') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', uiTheme);
+  // „systemowy” rozwiązujemy tutaj, więc w CSS jest tylko jeden zestaw kolorów na motyw
+  const t = uiTheme === 'auto' ? (systemDark.matches ? 'dark' : 'light') : uiTheme;
+  document.documentElement.setAttribute('data-theme', t);
   $('themeBtn').textContent = THEME_ICON[uiTheme];
 }
+systemDark.addEventListener('change', () => { if (uiTheme === 'auto') applyTheme(); });
 function cycleTheme() {
   uiTheme = THEMES[(THEMES.indexOf(uiTheme) + 1) % THEMES.length];
   store.set('theme', uiTheme);
@@ -807,8 +939,20 @@ $('sig').addEventListener('click', (e) => {
 $('themeBtn').addEventListener('click', cycleTheme);
 $('search').addEventListener('input', renderConsts);
 $('clearHist').addEventListener('click', () => { hist = []; store.set('hist', hist); renderHist(); });
-result.addEventListener('click', async () => {
-  const t = result.dataset.copy; if (!t) return;
+// Kliknięcie w wynik wstawia go do wyrażenia, podwójne kopiuje do schowka.
+let resultClickTimer = null;
+result.addEventListener('click', () => {
+  if (!result.dataset.copy || resultClickTimer) return;
+  resultClickTimer = setTimeout(() => {
+    resultClickTimer = null;
+    insert(result.dataset.copy);
+  }, 220);
+});
+result.addEventListener('dblclick', async () => {
+  clearTimeout(resultClickTimer);
+  resultClickTimer = null;
+  const t = result.dataset.copy;
+  if (!t) return;
   try { await navigator.clipboard.writeText(t); flash('Skopiowano: ' + t); } catch {}
 });
 document.addEventListener('keydown', (e) => {
