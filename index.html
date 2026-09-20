@@ -77,9 +77,16 @@ main {
 #expr::placeholder { color: var(--faint); }
 #preview { min-height: 20px; margin-top: 6px; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
 #preview.err { color: var(--err); }
+.preview-units { color: var(--eq-text); font-size: 12.5px; margin-top: 3px; opacity: .9; }
 #lastExpr { margin-top: 10px; color: var(--faint); font-size: 13px; min-height: 18px; overflow-wrap: anywhere; }
 #result { font-size: 34px; line-height: 1.2; overflow-wrap: anywhere; cursor: copy; }
 #result sup, .val sup, #preview sup, .hist sup { font-size: .62em; }
+#result .u { font-size: .7em; color: var(--eq-text); margin-left: 6px; font-weight: 500; }
+#unitTrack { margin-top: 6px; font-size: 14px; color: var(--eq-text); min-height: 0; overflow-wrap: anywhere; }
+#unitTrack:not(:empty) {
+  padding: 4px 10px; background: var(--key-fn); border-radius: 6px; display: inline-block; border-left: 3px solid var(--eq-text);
+}
+.unit-sub { font-size: 11.5px; color: var(--eq-text); opacity: .85; margin-top: 2px; }
 #resultRaw { color: var(--muted); font-size: 13px; min-height: 16px; margin-top: 2px; }
 .frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; line-height: 1.05; font-size: .85em; margin: 0 1px; }
 .frac > span:first-child { border-bottom: 1px solid currentColor; padding: 0 2px; }
@@ -181,6 +188,7 @@ main {
       <div id="preview" class="mono"></div>
       <div id="lastExpr" class="mono"></div>
       <div id="result" class="mono" title="Kliknij, żeby wstawić do działania · dwuklik kopiuje">0</div>
+      <div id="unitTrack" class="mono"></div>
       <div id="resultRaw" class="mono"></div>
     </div>
 
@@ -221,8 +229,8 @@ main {
   <div class="help">
     <b>Enter</b> oblicz · <b>↑ ↓</b> historia · <b>Esc</b> wyczyść ·
     część dziesiętna po przecinku <code>9,81</code>, argumenty oddziel średnikiem <code>root(8; 3)</code> ·
-    zmienne: <code>v = 12</code>, potem <code>v^2/2</code> ·
-    mnożenie można pomijać: <code>2πr</code>, <code>me c^2</code>
+    zmienne: <code>v = 12m/s</code> ·
+    jednostki i druga linia: <code>5kg*2</code>, <code>5m/s*2</code>, <code>100km/2h</code>, <code>G*MZ/RZ^2</code>
   </div>
   </section>
 
@@ -243,6 +251,175 @@ main {
 <script>
 (() => {
 'use strict';
+
+class CalcError extends Error {}
+const err = (m) => new CalcError(m);
+
+// ================= Jednostki =================
+// 7 jednostek podstawowych SI + wektory wymiarów
+const BASE = ['kg', 'm', 's', 'A', 'K', 'mol', 'cd'];
+const ORDER = ['kg', 'm', 's', 'A', 'K', 'mol', 'cd'];
+const SUP_DIGIT = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-' };
+const supNum = (n) => String(n).replace(/[-0-9]/g, (c) => ({ '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' }[c]));
+
+const uMul = (a, b, sg = 1) => {
+  const r = { ...a };
+  for (const [k, e] of Object.entries(b)) {
+    const v = (r[k] || 0) + sg * e;
+    if (Math.abs(v) > 1e-9) r[k] = v;
+    else delete r[k];
+  }
+  return r;
+};
+
+const uPow = (u, n) => {
+  const r = {};
+  for (const [k, e] of Object.entries(u)) {
+    const v = e * n;
+    if (Math.abs(v - Math.round(v * 2) / 2) > 1e-9) throw err('Nie da się podnieść jednostki do takiej potęgi');
+    if (Math.abs(v) > 1e-9) r[k] = Math.round(v * 1e6) / 1e6;
+  }
+  return r;
+};
+
+const uNone = (u) => !u || Object.keys(u).length === 0;
+const uEq = (a, b) => {
+  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  for (const k of keys) {
+    if (Math.abs(((a && a[k]) || 0) - ((b && b[k]) || 0)) > 1e-9) return false;
+  }
+  return true;
+};
+
+const DERIVED = {
+  N: 'kg*m/s^2', J: 'N*m', W: 'J/s', Pa: 'N/m^2', C: 'A*s', V: 'W/A',
+  'Ω': 'V/A', S: 'A/V', F: 'C/V', Wb: 'V*s', T: 'Wb/m^2', H: 'Wb/A',
+  Hz: '1/s', Bq: '1/s', Gy: 'J/kg', Sv: 'J/kg', rad: '1', sr: '1'
+};
+
+const EXTRA = {
+  g: ['kg', 1e-3], t: ['kg', 1e3], L: ['m^3', 1e-3], l: ['m^3', 1e-3],
+  min: ['s', 60], h: ['s', 3600], godz: ['s', 3600], d: ['s', 86400],
+  ha: ['m^2', 1e4], bar: ['Pa', 1e5], atm: ['Pa', 101325],
+  eV: ['J', 1.602176634e-19], u: ['kg', 1.66053906660e-27], au: ['m', 1.495978707e11],
+  ly: ['m', 9.4607304725808e15], pc: ['m', 3.0856775814914e16],
+  kmh: ['m/s', 1 / 3.6], Wh: ['J', 3600], kWh: ['J', 3.6e6], MWh: ['J', 3.6e9]
+};
+
+const PREFIX = {
+  Y: 1e24, Z: 1e21, E: 1e18, P: 1e15, T: 1e12, G: 1e9, M: 1e6, k: 1e3, h: 1e2, da: 10,
+  d: 1e-1, c: 1e-2, m: 1e-3, µ: 1e-6, μ: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15, a: 1e-18
+};
+
+function symbolUnit(name) {
+  if (name === '1') return { u: {}, f: 1 };
+  if (BASE.includes(name)) return { u: { [name]: 1 }, f: 1 };
+  if (name in DERIVED) return parseUnit(DERIVED[name]);
+  if (name in EXTRA) {
+    const [str, f] = EXTRA[name];
+    const p = parseUnit(str);
+    return { u: p.u, f: p.f * f };
+  }
+  if (name.length > 2 && name.startsWith('da')) {
+    const inner = symbolUnit(name.slice(2));
+    return { u: inner.u, f: inner.f * 10 };
+  }
+  if (name.length > 1) {
+    const p = name[0];
+    if (p in PREFIX) {
+      try {
+        const inner = symbolUnit(name.slice(1));
+        return { u: inner.u, f: inner.f * PREFIX[p] };
+      } catch {}
+    }
+  }
+  throw err(`Nieznana jednostka: ${name}`);
+}
+
+function parseUnit(str) {
+  const SUPS = /[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]/g;
+  const src = str.replace(/·/g, '*').replace(SUPS, (c) => (c === '⁻' ? '^-' : '^' + SUP_DIGIT[c]))
+                 .replace(/\^(-?)(\d)\^(\d)/g, '^$1$2$3');
+  let i = 0;
+  const skip = () => { while (src[i] === ' ') i++; };
+  function atom() {
+    skip();
+    if (src[i] === '(') {
+      i++;
+      const r = expr();
+      skip();
+      if (src[i] === ')') i++;
+      return r;
+    }
+    const m = /^[A-Za-zΩµμ]+/.exec(src.slice(i));
+    if (!m) {
+      const n = /^\d+/.exec(src.slice(i));
+      if (n) { i += n[0].length; return { u: {}, f: 1 }; }
+      throw err(`Zła jednostka: ${str}`);
+    }
+    i += m[0].length;
+    return symbolUnit(m[0]);
+  }
+  function term() {
+    let r = atom();
+    skip();
+    if (src[i] === '^') {
+      i++;
+      const m = /^-?\d+(\.\d+)?/.exec(src.slice(i));
+      if (!m) throw err(`Zła jednostka: ${str}`);
+      i += m[0].length;
+      const n = parseFloat(m[0]);
+      r = { u: uPow(r.u, n), f: Math.pow(r.f, n) };
+    }
+    return r;
+  }
+  function expr() {
+    let r = term();
+    for (;;) {
+      skip();
+      const op = src[i];
+      if (op !== '*' && op !== '/') return r;
+      i++;
+      const b = term();
+      r = { u: uMul(r.u, b.u, op === '*' ? 1 : -1), f: op === '*' ? r.f * b.f : r.f / b.f };
+    }
+  }
+  return expr();
+}
+
+function uText(u) {
+  if (!u) return '';
+  const keys = Object.keys(u).filter((k) => Math.abs(u[k]) > 1e-9).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+  const part = (k, e) => k + (e === 1 ? '' : supNum(e));
+  const top = keys.filter((k) => u[k] > 0).map((k) => part(k, u[k]));
+  const bot = keys.filter((k) => u[k] < 0).map((k) => part(k, -u[k]));
+  if (!top.length && !bot.length) return '';
+  if (!bot.length) return top.join('·');
+  const den = bot.length > 1 ? `(${bot.join('·')})` : bot[0];
+  return `${top.length ? top.join('·') : '1'}/${den}`;
+}
+
+const NAMED_PAIRS = [
+  ['N', 'kg*m/s^2'], ['J', 'kg*m^2/s^2'], ['W', 'kg*m^2/s^3'], ['Pa', 'kg/(m*s^2)'],
+  ['C', 'A*s'], ['V', 'kg*m^2/(s^3*A)'], ['Ω', 'kg*m^2/(s^3*A^2)'], ['F', 's^4*A^2/(kg*m^2)'],
+  ['T', 'kg/(s^2*A)'], ['Wb', 'kg*m^2/(s^2*A)'], ['H', 'kg*m^2/(s^2*A^2)'], ['S', 's^3*A^2/(kg*m^2)'],
+  ['Hz', '1/s']
+].map(([n, d]) => [n, parseUnit(d).u]);
+
+const uName = (u) => {
+  if (!u || uNone(u)) return null;
+  const match = NAMED_PAIRS.find(([, d]) => uEq(d, u));
+  return match ? match[0] : null;
+};
+
+const uInline = (u) => {
+  if (!u || uNone(u)) return '';
+  const name = uName(u);
+  if (name) return name;
+  return uText(u)
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g, (m) => '^' + [...m].map((c) => SUP_DIGIT[c]).join(''))
+    .replace(/·/g, '*');
+};
 
 // ================= Stałe =================
 // [id, symbol (HTML), nazwa, wartość, jednostka, grupa, aliasy]
@@ -368,7 +545,9 @@ const CONSTS = [
 ];
 const CONST = {};
 for (const [id, sym, name, value, unit, group, aliases = []] of CONSTS) {
-  const c = { id, sym, name, value, unit, group };
+  let u = {};
+  try { u = unit ? parseUnit(unit).u : {}; } catch { u = {}; }
+  const c = { id, sym, name, value, unit, group, u };
   CONST[id] = c;
   for (const a of aliases) CONST[a] = c;
 }
@@ -383,12 +562,10 @@ let sig = store.get('sig', 'auto');
 let vars = store.get('vars', {});
 let uiTheme = store.get('theme', 'auto');   // 'auto' | 'dark' | 'gemini'
 let hist = store.get('hist', []);
-let ans = hist.length ? hist[0].v : 0;
+let ans = hist.length ? { v: hist[0].v, u: hist[0].u || {} } : { v: 0, u: {} };
 let histPos = -1;
 
 // ================= Funkcje =================
-class CalcError extends Error {}
-const err = (m) => new CalcError(m);
 const toRad = (x) => angle === 'deg' ? x * Math.PI / 180 : x;
 const fromRad = (x) => angle === 'deg' ? x * 180 / Math.PI : x;
 const clean = (x) => Math.abs(x) < 1e-14 ? 0 : x;
@@ -435,6 +612,46 @@ const NUM_RE = /^(\d+(?:[.,]\d+)?|\d+\.|[.,]\d+)(?:[eE][+-]?\d+)?/;
 const OP_MAP = { '×': '*', '·': '*', '÷': '/', '−': '-', '–': '-', ';': ',' };
 const known = (n) => n in FUNCS || n in CONST || n in vars || n === 'ans';
 
+function readUnit(src, i) {
+  const SYM = /^[A-Za-zΩµμ]+/;
+  let j = i, u = {}, f = 1, rawParts = [], first = true;
+  while (j < src.length && src[j] === ' ') j++;
+  
+  for (;;) {
+    let sign = 1;
+    let savedJ = j;
+    if (!first) {
+      while (j < src.length && src[j] === ' ') j++;
+      const op = src[j];
+      if (op !== '*' && op !== '·' && op !== '/') { j = savedJ; break; }
+      const nextNonSpace = src.slice(j + 1).replace(/^\s+/, '');
+      if (!SYM.test(nextNonSpace)) { j = savedJ; break; }
+      sign = op === '/' ? -1 : 1;
+      j++;
+      while (j < src.length && src[j] === ' ') j++;
+    }
+    const m = SYM.exec(src.slice(j));
+    if (!m) break;
+    const sym = m[0];
+    if (first && (sym in FUNCS || sym === 'ans')) break;
+    let part;
+    try { part = symbolUnit(sym); } catch { break; }
+    j += sym.length;
+    let e = 1;
+    const sup = /^\^(-?\d+)|^[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/.exec(src.slice(j));
+    if (sup) {
+      e = sup[1] !== undefined ? parseInt(sup[1], 10)
+        : parseInt([...sup[0]].map((c) => SUP_DIGIT[c]).join(''), 10);
+      j += sup[0].length;
+    }
+    u = uMul(u, uPow(part.u, e), sign);
+    f = sign > 0 ? f * Math.pow(part.f, e) : f / Math.pow(part.f, e);
+    rawParts.push(sign < 0 ? `/${sym}${e !== 1 ? '^' + e : ''}` : `${first ? '' : '·'}${sym}${e !== 1 ? '^' + e : ''}`);
+    first = false;
+  }
+  return first ? null : { u, f, raw: rawParts.join(''), end: j };
+}
+
 function tokenize(src) {
   const t = [];
   let i = 0;
@@ -444,20 +661,28 @@ function tokenize(src) {
     const rest = src.slice(i);
     if (/[0-9.,]/.test(ch) && NUM_RE.test(rest)) {
       const m = NUM_RE.exec(rest)[0];
-      t.push({ k: 'num', v: parseFloat(m.replace(',', '.')) });
-      i += m.length; continue;
+      i += m.length;
+      const numVal = parseFloat(m.replace(',', '.'));
+      const un = readUnit(src, i);
+      if (un) {
+        t.push({ k: 'num', v: numVal * un.f, u: un.u, rawU: un.raw, origV: numVal });
+        i = un.end;
+      } else {
+        t.push({ k: 'num', v: numVal, u: {}, rawU: '' });
+      }
+      continue;
     }
     if (ch === ',') throw err('Przecinek to część dziesiętna – argumenty oddzielaj średnikiem ;');
-    if (ch === 'π' || ch === 'ħ') { t.push({ k: 'id', v: ch }); i++; continue; }   // 2πr → 2·π·r
+    if (ch === 'π' || ch === 'ħ') { t.push({ k: 'id', v: ch }); i++; continue; }
     if (ID_START.test(ch)) {
       const m = ID_RE.exec(rest)[0];
       const split = /^([A-Za-z]+)(\d+(?:[.,]\d+)?)$/.exec(m);
-      if (!known(m) && split && split[1] in FUNCS) {        // sin30 → sin 30
-        t.push({ k: 'id', v: split[1] }, { k: 'num', v: parseFloat(split[2].replace(',', '.')) });
+      if (!known(m) && split && split[1] in FUNCS) {
+        t.push({ k: 'id', v: split[1] }, { k: 'num', v: parseFloat(split[2].replace(',', '.')), u: {}, rawU: '' });
       } else t.push({ k: 'id', v: m });
       i += m.length; continue;
     }
-    if (ch === '²' || ch === '³') { t.push({ k: 'op', v: '^' }, { k: 'num', v: ch === '²' ? 2 : 3 }); i++; continue; }
+    if (ch === '²' || ch === '³') { t.push({ k: 'op', v: '^' }, { k: 'num', v: ch === '²' ? 2 : 3, u: {}, rawU: '' }); i++; continue; }
     const op = OP_MAP[ch] || ch;
     if ('+-*/^()!%=,√'.includes(op)) { t.push({ k: 'op', v: op }); i++; continue; }
     throw err(`Nieznany znak: ${ch}`);
@@ -481,7 +706,7 @@ function parse(tokens) {
     let n = unary();
     for (;;) {
       if (isOp('*') || isOp('/')) { const o = tokens[p++].v; n = { t: 'bin', o, a: n, b: unary() }; }
-      else if (startsValue(peek())) n = { t: 'bin', o: '*', a: n, b: unary() };  // mnożenie domyślne: 2πr
+      else if (startsValue(peek())) n = { t: 'bin', o: '*', a: n, b: unary() };
       else return n;
     }
   }
@@ -503,12 +728,12 @@ function parse(tokens) {
   }
   function closeParen() {
     if (isOp(')')) { p++; return; }
-    if (p < tokens.length) throw err('Brakuje nawiasu )');   // na końcu domykamy automatycznie
+    if (p < tokens.length) throw err('Brakuje nawiasu )');
   }
   function primary() {
     const tok = tokens[p++];
     if (!tok) throw err('Niedokończone wyrażenie');
-    if (tok.k === 'num') return { t: 'num', v: tok.v };
+    if (tok.k === 'num') return { t: 'num', v: tok.v, u: tok.u || {}, rawU: tok.rawU || '', origV: tok.origV };
     if (tok.k === 'op' && tok.v === '(') { const n = additive(); closeParen(); return n; }
     if (tok.k === 'id') {
       if (tok.v in FUNCS && !(tok.v in vars)) {
@@ -519,7 +744,7 @@ function parse(tokens) {
           closeParen();
           return { t: 'call', f: tok.v, args };
         }
-        return { t: 'call', f: tok.v, args: [unary()] };   // sin 30
+        return { t: 'call', f: tok.v, args: [unary()] };
       }
       return { t: 'var', name: tok.v };
     }
@@ -547,48 +772,151 @@ function parse(tokens) {
 }
 
 // ================= Obliczanie =================
-function ev(n) {
+const Q = (v, u = {}) => ({ v, u });
+const U_KEEP = new Set(['abs', 'floor', 'ceil', 'round', 'min', 'max']);
+
+function evq(n) {
   switch (n.t) {
-    case 'num': return n.v;
-    case 'var':
-      if (n.name in vars) return vars[n.name];
-      if (n.name === 'ans') return ans;
-      if (n.name in CONST) return CONST[n.name].value;
+    case 'num': return Q(n.v, n.u || {});
+    case 'var': {
+      if (n.name in vars) {
+        const val = vars[n.name];
+        return (typeof val === 'object' && val !== null && 'v' in val) ? val : Q(val, {});
+      }
+      if (n.name === 'ans') return (typeof ans === 'object' && ans !== null && 'v' in ans) ? ans : Q(ans, {});
+      if (n.name in CONST) return Q(CONST[n.name].value, CONST[n.name].u);
       throw err(`Nieznana nazwa: ${n.name}`);
-    case 'neg': return -ev(n.a);
-    case 'pct': return ev(n.a) / 100;
+    }
+    case 'neg': { const a = evq(n.a); return Q(-a.v, a.u); }
+    case 'pct': { const a = evq(n.a); return Q(a.v / 100, a.u); }
     case 'fact': {
-      const x = ev(n.a);
-      if (!Number.isInteger(x) || x < 0) throw err('Silnia tylko dla liczb całkowitych ≥ 0');
-      if (x > 170) return Infinity;
-      let r = 1; for (let i = 2; i <= x; i++) r *= i; return r;
+      const a = evq(n.a);
+      if (!uNone(a.u)) throw err('Silnia działa tylko na liczbach bez jednostki');
+      if (!Number.isInteger(a.v) || a.v < 0) throw err('Silnia tylko dla liczb całkowitych ≥ 0');
+      if (a.v > 170) return Q(Infinity);
+      let r = 1; for (let i = 2; i <= a.v; i++) r *= i; return Q(r);
     }
     case 'bin': {
-      const a = ev(n.a), b = ev(n.b);
+      const a = evq(n.a), b = evq(n.b);
       switch (n.o) {
-        case '+': return a + b;
-        case '-': return a - b;
-        case '*': return a * b;
-        case '/': if (b === 0) throw err('Dzielenie przez zero'); return a / b;
+        case '+': case '-': {
+          if (!uEq(a.u, b.u)) {
+            const utA = uText(a.u) || 'bezwymiarowa';
+            const utB = uText(b.u) || 'bezwymiarowa';
+            throw err(`Nie można ${n.o === '+' ? 'dodać' : 'odjąć'} wielkości o różnych jednostkach: ${utA} i ${utB}`);
+          }
+          return Q(n.o === '+' ? a.v + b.v : a.v - b.v, a.u);
+        }
+        case '*': return Q(a.v * b.v, uMul(a.u, b.u, 1));
+        case '/': {
+          if (b.v === 0) throw err('Dzielenie przez zero');
+          return Q(a.v / b.v, uMul(a.u, b.u, -1));
+        }
         case '^': {
-          if (a < 0 && !Number.isInteger(b)) throw err('Potęga o niecałkowitym wykładniku z liczby ujemnej');
-          return Math.pow(a, b);
+          if (!uNone(b.u)) throw err('Wykładnik potęgi nie może mieć jednostki');
+          if (a.v < 0 && !Number.isInteger(b.v)) throw err('Potęga o niecałkowitym wykładniku z liczby ujemnej');
+          return Q(Math.pow(a.v, b.v), uPow(a.u, b.v));
         }
       }
+      break;
     }
     case 'call': {
       const [min, max, fn] = FUNCS[n.f];
       if (n.args.length < min || n.args.length > max) {
         throw err(min === max ? `${n.f}: potrzebne ${min} argument(y)` : `${n.f}: od ${min} do ${max} argumentów`);
       }
-      return fn(...n.args.map(ev));
+      const args = n.args.map(evq);
+      const v = fn(...args.map((q) => q.v));
+      if (n.f === 'sqrt') return Q(v, uPow(args[0].u, 0.5));
+      if (n.f === 'cbrt') return Q(v, uPow(args[0].u, 1 / 3));
+      if (n.f === 'root') {
+        if (!uNone(args[1].u)) throw err('Stopień pierwiastka nie może mieć jednostki');
+        return Q(v, uPow(args[0].u, 1 / args[1].v));
+      }
+      if (U_KEEP.has(n.f)) {
+        const u = args[0].u;
+        if (!args.every((q) => uEq(q.u, u))) throw err(`${n.f}: argumenty muszą mieć tę samą jednostkę`);
+        return Q(v, u);
+      }
+      const bad = args.find((q) => !uNone(q.u));
+      if (bad) throw err(`${n.f}: argument nie może mieć jednostki (${uText(bad.u)})`);
+      return Q(v);
     }
   }
   throw err('Błąd wyrażenia');
 }
 
-// Domykanie nawiasów: brakujący otwierający dopisujemy najdalej w lewo,
-// czyli 5+2)/3 czytamy jako (5+2)/3, a 2/(3+2 jako 2/(3+2).
+// Druga linia: operacje na jednostkach krok po kroku
+const PREC = { '+': 1, '-': 1, '*': 2, '/': 2, '^': 3 };
+
+function unitWalk(n) {
+  const plain = (u) => ({ text: '1', u, bare: true, prec: 9 });
+  switch (n.t) {
+    case 'num': {
+      if (uNone(n.u)) return plain(n.u);
+      const txt = uText(n.u);
+      return { text: txt, u: n.u, bare: false, prec: 9 };
+    }
+    case 'var': {
+      const q = evq(n);
+      if (uNone(q.u)) return plain(q.u);
+      const txt = (n.name in CONST && CONST[n.name].unit) ? CONST[n.name].unit : uText(q.u);
+      return { text: txt, u: q.u, bare: false, prec: 9 };
+    }
+    case 'neg': case 'pct': return unitWalk(n.a);
+    case 'fact': return plain({});
+    case 'bin': {
+      const q = evq(n);
+      if (n.o === '^') {
+        const a = unitWalk(n.a);
+        const expVal = evq(n.b).v;
+        if (a.bare) return plain(q.u);
+        const aText = a.prec < 3 || a.text.includes('/') ? `(${a.text})` : a.text;
+        const expText = supNum(expVal);
+        return { text: `${aText}${expText}`, u: q.u, bare: false, prec: 3 };
+      }
+      const a = unitWalk(n.a), b = unitWalk(n.b);
+      if (a.bare && b.bare) return plain(q.u);
+      
+      const p = PREC[n.o];
+      const op = { '*': ' · ', '/': ' / ', '+': ' + ', '-': ' − ' }[n.o];
+      const wrap = (side, min) => (side.prec < min ? `(${side.text})` : side.text);
+      let left = wrap(a, p);
+      let right = wrap(b, p + (n.o === '/' || n.o === '-' ? 1 : 0));
+      return { text: `${left}${op}${right}`, u: q.u, bare: false, prec: p };
+    }
+    case 'call': {
+      const parts = n.args.map(unitWalk);
+      const q = evq(n);
+      if (parts.every((x) => x.bare)) return plain(q.u);
+      const inner = parts.map((x) => x.text).join('; ');
+      if (n.f === 'sqrt') return { text: `√(${inner})`, u: q.u, bare: false, prec: 9 };
+      if (n.f === 'cbrt') return { text: `∛(${inner})`, u: q.u, bare: false, prec: 9 };
+      return { text: `${n.f}(${inner})`, u: q.u, bare: false, prec: 9 };
+    }
+  }
+  return plain({});
+}
+
+function unitLine(tree) {
+  const w = unitWalk(tree);
+  if (w.bare) return null;
+  const res = uText(w.u) || '1';
+  const name = uName(w.u);
+  const cleanExpr = w.text.trim();
+  if (name && name !== res) {
+    if (cleanExpr !== res && cleanExpr !== name) {
+      return `${cleanExpr} = ${res} = ${name}`;
+    }
+    return `${cleanExpr} = ${name}`;
+  }
+  if (cleanExpr !== res) {
+    return `${cleanExpr} = ${res}`;
+  }
+  return res;
+}
+
+// Domykanie nawiasów: brakujący otwierający dopisujemy najdalej w lewo
 function balance(src) {
   let depth = 0, need = 0;
   for (const ch of src) {
@@ -607,10 +935,10 @@ function balance(src) {
 function calc(raw) {
   const src = balance(raw);
   const { assign, tree } = parse(tokenize(src));
-  const v = ev(tree);
-  if (Number.isNaN(v)) throw err('Wynik nieokreślony');
-  if (!Number.isFinite(v)) throw err('Wynik poza zakresem');
-  return { assign, v, src };
+  const q = evq(tree);
+  if (Number.isNaN(q.v)) throw err('Wynik nieokreślony');
+  if (!Number.isFinite(q.v)) throw err('Wynik poza zakresem');
+  return { assign, v: q.v, u: q.u, src, units: unitLine(tree) };
 }
 
 // ================= Formatowanie =================
@@ -704,22 +1032,36 @@ function livePreview() {
   const src = expr.value.trim();
   if (!src) { preview.textContent = ''; return; }
   try {
-    const { assign, v, src: full } = calc(src);
+    const { assign, v, u, src: full, units } = calc(src);
     const fr = toFraction(v);
+    const uStr = uName(u) || uText(u);
     const shown = full !== src ? esc(full) + ' ' : '';
-    preview.innerHTML = shown + (assign ? esc(assign) + ' ' : '') + '= ' + fmt(v).html + (fr ? ' = ' + fracHtml(fr) : '');
+    let html = shown + (assign ? esc(assign) + ' ' : '') + '= ' + fmt(v).html + (uStr ? ' ' + esc(uStr) : '') + (fr ? ' = ' + fracHtml(fr) + (uStr ? ' ' + esc(uStr) : '') : '');
+    if (units) {
+      html += `<div class="preview-units">${esc(units)}</div>`;
+    }
+    preview.innerHTML = html;
   } catch { preview.textContent = ''; }
 }
 
-function showResult(label, v) {
+function showResult(label, v, u = {}, units = null) {
   lastExpr.textContent = label;
   const f = fmt(v);
-  result.innerHTML = f.html;
-  result.dataset.copy = exactText(v);
+  const uStr = uName(u) || uText(u);
+  result.innerHTML = f.html + (uStr ? `<span class="u">${esc(uStr)}</span>` : '');
+  const uIn = uInline(u);
+  result.dataset.copy = exactText(v) + (uStr ? ' ' + uStr : '');
+  result.dataset.insert = exactText(v) + (uIn ? uIn : '');
+  
+  const unitEl = $('unitTrack');
+  if (unitEl) {
+    unitEl.textContent = units || '';
+  }
+  
   const parts = [];
   const fr = toFraction(v);
-  if (fr) parts.push('ułamek: ' + fracHtml(fr));
-  if (!(sig === 'auto' && f.text === exactText(v))) parts.push('dokładnie: ' + esc(exactText(v)));
+  if (fr) parts.push('ułamek: ' + fracHtml(fr) + (uStr ? ' ' + esc(uStr) : ''));
+  if (!(sig === 'auto' && f.text === exactText(v))) parts.push('dokładnie: ' + esc(exactText(v)) + (uStr ? ' ' + esc(uStr) : ''));
   resultRaw.innerHTML = parts.join(' &nbsp;·&nbsp; ');
 }
 
@@ -727,14 +1069,18 @@ function run() {
   const src = expr.value.trim();
   if (!src) return;
   try {
-    const { assign, v, src: full } = calc(src);
-    if (assign) { vars[assign] = v; store.set('vars', vars); renderVars(); }
-    ans = v;
-    hist.unshift({ e: full, v });
+    const { assign, v, u, src: full, units } = calc(src);
+    if (assign) {
+      vars[assign] = { v, u };
+      store.set('vars', vars);
+      renderVars();
+    }
+    ans = { v, u };
+    hist.unshift({ e: full, v, u, units });
     hist = hist.slice(0, 100);
     store.set('hist', hist);
     histPos = -1;
-    showResult(full + ' =', v);
+    showResult(full + ' =', v, u, units);
     expr.value = '';
     lastSel = null;
     preview.textContent = '';
@@ -767,11 +1113,20 @@ function renderHist() {
   ol.replaceChildren();
   $('histEmpty').hidden = hist.length > 0;
   hist.forEach((h) => {
-    const li = row('', h.e, { html: '= ' + fmt(h.v).html },
+    const uStr = h.u ? (uName(h.u) || uText(h.u)) : '';
+    const resHtml = '= ' + fmt(h.v).html + (uStr ? ' ' + esc(uStr) : '');
+    const uIn = h.u ? uInline(h.u) : '';
+    const li = row('', h.e, { html: resHtml },
       () => insertExpr(h.e),
-      () => insert(exactText(h.v)));
+      () => insert(exactText(h.v) + (uIn ? uIn : '')));
     li.firstChild.title = h.e + '  (kliknij, żeby wstawić)';
     li.lastChild.title = 'Wstaw wynik w miejsce kursora';
+    if (h.units) {
+      const sub = document.createElement('div');
+      sub.className = 'unit-sub mono';
+      sub.textContent = h.units;
+      li.firstChild.append(sub);
+    }
     ol.append(li);
   });
 }
@@ -779,7 +1134,7 @@ function renderHist() {
 // Wstawia działanie z historii w miejsce kursora, w nawiasie, jeśli trzeba.
 function insertExpr(text) {
   const m = /^\s*[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03FF]*\s*=(.*)$/.exec(text);
-  let t = m ? m[1].trim() : text;                      // z "v = 12*3" bierzemy "12*3"
+  let t = m ? m[1].trim() : text;
   const simple = /^[A-Za-z0-9_,.\u0370-\u03FF]+$/.test(t);
   if (expr.value.trim() && !simple) t = '(' + t + ')';
   insert(t);
@@ -791,6 +1146,10 @@ function renderVars() {
   const ol = $('vars');
   ol.replaceChildren();
   for (const n of names) {
+    const val = vars[n];
+    const num = (typeof val === 'object' && val !== null && 'v' in val) ? val.v : val;
+    const u = (typeof val === 'object' && val !== null && 'u' in val) ? val.u : {};
+    const uStr = uName(u) || uText(u);
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.className = 'row';
@@ -798,7 +1157,7 @@ function renderVars() {
     const shadow = n in CONST;
     b.innerHTML = `<div class="top"><span class="sym">${esc(n)}</span>` +
       `<span class="name${shadow ? ' shadowed' : ''}">${shadow ? 'przesłania stałą: ' + esc(CONST[n].name) : ''}</span></div>` +
-      `<div class="bottom"><span class="val mono">${fmt(vars[n]).html}</span></div>`;
+      `<div class="bottom"><span class="val mono">${fmt(num).html}${uStr ? ' ' + esc(uStr) : ''}</span></div>`;
     b.addEventListener('pointerdown', (e) => e.preventDefault());
     b.onclick = () => insert(n);
     const x = document.createElement('button');
@@ -934,7 +1293,7 @@ $('angle').addEventListener('click', (e) => {
 $('sig').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   sig = b.dataset.s; store.set('sig', sig); renderModes(); livePreview(); renderHist(); renderVars();
-  if (hist.length) showResult(lastExpr.textContent || hist[0].e + ' =', hist[0].v);
+  if (hist.length) showResult(lastExpr.textContent || hist[0].e + ' =', hist[0].v, hist[0].u, hist[0].units);
 });
 $('themeBtn').addEventListener('click', cycleTheme);
 $('search').addEventListener('input', renderConsts);
@@ -945,7 +1304,7 @@ result.addEventListener('click', () => {
   if (!result.dataset.copy || resultClickTimer) return;
   resultClickTimer = setTimeout(() => {
     resultClickTimer = null;
-    insert(result.dataset.copy);
+    insert(result.dataset.insert || result.dataset.copy);
   }, 220);
 });
 result.addEventListener('dblclick', async () => {
@@ -969,7 +1328,7 @@ renderModes();
 renderHist();
 renderVars();
 renderConsts();
-if (hist.length) showResult(hist[0].e + ' =', hist[0].v);
+if (hist.length) showResult(hist[0].e + ' =', hist[0].v, hist[0].u, hist[0].units);
 if (fine) expr.focus();
 })();
 </script>
