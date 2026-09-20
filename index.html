@@ -34,6 +34,15 @@
   --text: #e6e6e6; --muted: #9c9c9c; --faint: #6f6f6f; --line: rgba(255,255,255,.07);
   --eq-bg: #d9d9d9; --eq-text: #121212; --err: #ff8a7a; --shadow: none;
 }
+/* Motyw Gemini – kolory odczytane z gemini.google.com */
+:root[data-theme="gemini"] {
+  --bg: #0f0f0f; --panel: #1b1b1b; --key: #282a2c; --key-hi: #333537; --key-fn: #1e1f20;
+  --text: #e3e3e3; --muted: #c4c7c5; --faint: #9a9b9c; --line: #333537;
+  --eq-bg: #a8c7fa; --eq-text: #062e6f; --err: #f2b8b5; --hint: #282a2c; --shadow: none;
+}
+:root[data-theme="gemini"] body {
+  font-family: "Google Sans Flex", "Google Sans", "Helvetica Neue", system-ui, sans-serif;
+}
 :root {
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
@@ -60,6 +69,8 @@ main {
 .seg { display: flex; gap: 2px; }
 .seg button { padding: 2px 7px; border-radius: 4px; color: var(--faint); }
 .seg button.on { background: var(--key-hi); color: var(--text); }
+.bar .icon { margin-left: auto; margin-right: 8px; padding: 2px 6px; border-radius: 4px; color: var(--faint); font-size: 15px; line-height: 1; }
+.bar .icon:hover { background: var(--key-hi); color: var(--text); }
 #expr {
   width: 100%; margin-top: 10px; padding: 6px 0; font-size: 20px;
   background: transparent; color: var(--text); border: 0; border-bottom: 1px solid var(--line); outline: none;
@@ -151,6 +162,7 @@ main {
           <button data-m="deg" title="Kąty w stopniach">DEG</button>
           <button data-m="rad" title="Kąty w radianach">RAD</button>
         </div>
+        <button id="themeBtn" class="icon" title="Motyw: systemowy / ciemny / Gemini (Ctrl+M)" aria-label="Motyw">◐</button>
         <div class="seg" id="sig" title="Cyfry znaczące wyniku">
           <span style="padding:2px 4px">cyfry:</span>
           <button data-s="auto">auto</button><button data-s="2">2</button><button data-s="3">3</button><button data-s="4">4</button><button data-s="5">5</button>
@@ -292,6 +304,7 @@ const store = {
 let angle = store.get('angle', 'deg');
 let sig = store.get('sig', 'auto');
 let vars = store.get('vars', {});
+let uiTheme = store.get('theme', 'auto');   // 'auto' | 'dark' | 'gemini'
 let hist = store.get('hist', []);
 let ans = hist.length ? hist[0].v : 0;
 let histPos = -1;
@@ -714,6 +727,20 @@ function renderConsts() {
   if (!box.children.length) box.innerHTML = '<div class="empty">Nic nie znaleziono.</div>';
 }
 
+const THEMES = ['auto', 'dark', 'gemini'];
+const THEME_ICON = { auto: '◐', dark: '●', gemini: '✦' };
+function applyTheme() {
+  if (uiTheme === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', uiTheme);
+  $('themeBtn').textContent = THEME_ICON[uiTheme];
+}
+function cycleTheme() {
+  uiTheme = THEMES[(THEMES.indexOf(uiTheme) + 1) % THEMES.length];
+  store.set('theme', uiTheme);
+  applyTheme();
+  flash(uiTheme === 'auto' ? 'Motyw: systemowy' : uiTheme === 'dark' ? 'Motyw: ciemny' : 'Motyw: Gemini');
+}
+
 function renderModes() {
   for (const b of $('angle').querySelectorAll('button')) b.classList.toggle('on', b.dataset.m === angle);
   for (const b of $('sig').querySelectorAll('button')) b.classList.toggle('on', b.dataset.s === String(sig));
@@ -726,6 +753,7 @@ expr.addEventListener('input', () => {
   livePreview();
 });
 expr.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); cycleTheme(); return; }
   if (e.key === 'Enter') { e.preventDefault(); run(); }
   else if (e.key === 'Escape') { expr.value = ''; histPos = -1; livePreview(); }
   else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -776,6 +804,7 @@ $('sig').addEventListener('click', (e) => {
   sig = b.dataset.s; store.set('sig', sig); renderModes(); livePreview(); renderHist(); renderVars();
   if (hist.length) showResult(lastExpr.textContent || hist[0].e + ' =', hist[0].v);
 });
+$('themeBtn').addEventListener('click', cycleTheme);
 $('search').addEventListener('input', renderConsts);
 $('clearHist').addEventListener('click', () => { hist = []; store.set('hist', hist); renderHist(); });
 result.addEventListener('click', async () => {
@@ -783,6 +812,7 @@ result.addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(t); flash('Skopiowano: ' + t); } catch {}
 });
 document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); cycleTheme(); return; }
   // pisanie gdziekolwiek trafia do pola wyrażenia
   if (document.activeElement === expr || document.activeElement === $('search')) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -790,6 +820,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ---- start ----
+applyTheme();
 renderModes();
 renderHist();
 renderVars();
