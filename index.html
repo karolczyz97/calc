@@ -102,7 +102,8 @@ main {
 /* ---- Tryb osadzenia (Embed / iFrame) ---- */
 html.embedded, html.embedded body { min-height: auto; }
 html.embedded main { max-width: 480px; margin: 0 auto; padding: 8px; grid-template-columns: 1fr; }
-html.embedded .side, html.embedded .help { display: none !important; }
+html.embedded:not([data-show-side="1"]) .side, html.embedded .help { display: none !important; }
+html.embedded[data-show-side="1"] .side { margin-top: 14px; position: static; max-height: none; }
 html.embedded[data-bg="transparent"], html.embedded[data-bg="transparent"] body { background: transparent !important; }
 html.embedded[data-hide-keys="1"] #keys { display: none !important; }
 html.embedded[data-hide-hist="1"] .hist { display: none !important; }
@@ -1489,6 +1490,9 @@ if (isEmbed) {
   }
   if (urlParams.get('hide_hist') === '1') {
     document.documentElement.setAttribute('data-hide-hist', '1');
+  }
+  if (urlParams.get('side') === '1' || urlParams.get('consts') === '1') {
+    document.documentElement.setAttribute('data-show-side', '1');
   }
 }
 if (urlParams.get('theme') && THEMES.includes(urlParams.get('theme'))) {
