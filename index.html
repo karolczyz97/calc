@@ -854,7 +854,10 @@ function unitWalk(n) {
   switch (n.t) {
     case 'num': {
       if (uNone(n.u)) return plain(n.u);
-      const txt = uText(n.u);
+      let txt = uText(n.u);
+      if (n.rawU) {
+        txt = n.rawU.replace(/\^1\b/g, '').replace(/\^2\b/g, '²').replace(/\^3\b/g, '³').replace(/\*/g, '·');
+      }
       return { text: txt, u: n.u, bare: false, prec: 9 };
     }
     case 'var': {
