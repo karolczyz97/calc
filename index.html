@@ -1511,8 +1511,16 @@ const initialExpr = urlParams.get('expr');
 if (initialExpr) {
   expr.value = initialExpr;
   run();
-} else if (fine) {
+} else if (!isEmbed && fine) {
   expr.focus();
+}
+
+if (isEmbed) {
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || ((e.key === 'k' || e.key === 'K') && document.activeElement !== expr && document.activeElement !== $('search'))) {
+      try { window.parent.postMessage({ type: 'darkpdf_close_calc' }, '*'); } catch {}
+    }
+  });
 }
 
 if (typeof window !== 'undefined' && window.addEventListener) {
