@@ -742,7 +742,9 @@ function readUnit(src, i) {
     const m = SYM.exec(src.slice(j));
     if (!m) break;
     const sym = m[0];
-    if (first && (sym in FUNCS || sym === 'ans')) break;
+    if (sym === 'ans' || sym in vars) break;                 // zmienna użytkownika ma pierwszeństwo przed jednostką
+    if (sym === 'g') break;                                    // samo g to przyspieszenie ziemskie, nie gram (mg, kg działają)
+    if (sym in FUNCS && src[j + sym.length] === '(') break;    // min( to funkcja, 60min to minuty
     let part;
     try { part = symbolUnit(sym); } catch { break; }
     j += sym.length;
@@ -1090,8 +1092,6 @@ function calc(raw) {
 }
 
 // ================= Formatowanie =================
-const SUP = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻' };
-const supText = (n) => String(n).replace(/[-0-9]/g, (c) => SUP[c]);
 const NNBSP = '\u202f';
 
 function group(intStr) {
@@ -1554,6 +1554,7 @@ if (isEmbed) {
     }
   });
   window.addEventListener('message', (e) => {
+    if (e.source !== window.parent) return;                  // przyjmujemy tylko od czytnika, który nas osadził
     if (e.data && e.data.type === 'darkpdf_theme' && THEMES.includes(e.data.theme)) {
       uiTheme = e.data.theme;
       applyTheme();
