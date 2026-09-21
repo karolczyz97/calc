@@ -157,9 +157,15 @@ html.embedded .panel { background: transparent !important; box-shadow: none !imp
 .side { display: flex; flex-direction: column; min-height: 0; }
 @media (min-width: 821px) { .side { position: sticky; top: 14px; max-height: calc(100vh - 28px); } }
 #search {
-  margin: 2px 12px 6px; padding: 6px 9px; border-radius: 6px; border: 1px solid var(--line);
-  background: var(--key-fn); color: var(--text); outline: none; font: inherit;
+  margin: 4px 12px 8px; padding: 7px 12px; border-radius: 18px; border: 0;
+  background: rgba(255, 255, 255, .06); color: var(--text); outline: none; font: inherit; font-size: 13px;
+  transition: background .15s, box-shadow .15s;
 }
+#search:focus {
+  background: rgba(255, 255, 255, .10);
+  box-shadow: 0 0 0 1px rgba(168, 199, 250, .4);
+}
+#search::placeholder { color: var(--faint); }
 .consts { overflow: auto; padding-bottom: 6px; }
 .group {
   display: flex; align-items: center; gap: 6px; width: 100%;
