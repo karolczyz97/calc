@@ -1,8 +1,8 @@
-// Kalkulator – pamięć podręczna, dzięki której działa bez internetu (także w panelu DarkPDF).
+// Kalkulator – pamięć podręczna, dzięki której działa bez internetu.
 // Strona i motyw: najpierw z sieci, bez sieci – ostatnia zapisana wersja.
 // KaTeX z CDN ma stały numer wersji, więc bierzemy go od razu z pamięci.
-const CACHE = 'calc-v1';
-const CORE = ['./', 'index.html'];
+const CACHE = 'calc-v2';
+const CORE = ['./', 'index.html', 'calc.css', 'calc-app.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
@@ -35,7 +35,7 @@ self.addEventListener('fetch', (e) => {
       if (res.ok) cache.put(req, res.clone());
       return res;
     } catch (err) {
-      const hit = await cache.match(req, { ignoreSearch: true });   // ?embed=1&mode=… – każda wersja się nada
+      const hit = await cache.match(req, { ignoreSearch: true });
       if (hit) return hit;
       throw err;
     }
