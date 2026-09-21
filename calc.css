@@ -1,6 +1,10 @@
 /* calc.css – Style kalkulatora naukowego (działa samodzielnie oraz jako komponent w DarkPDF) */
 
-:root, .calc-root {
+/* Motyw działa tylko wewnątrz .calc-root – na stronie czytnika nic nie przecieka.
+   Samodzielnie: tryb i paleta z atrybutów data-mode / data-palette na <html>.
+   W DarkPDF: z klas .dark / .gemini, które ustawia czytnik. */
+.calc-root {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: dark;
   --calc-bg: Canvas;
   --calc-panel: Canvas;
@@ -19,19 +23,17 @@
   --calc-shadow: none;
 }
 
-/* Tryb jasny (zarówno data-mode="light", jak i brak klasy .dark w DarkPDF) */
-:root[data-mode="light"],
-html:not(.dark) .calc-root,
-html:not(.dark):not(.gemini) .calc-root {
+/* Jasny */
+html[data-mode="light"] .calc-root,
+html:not(.dark) .calc-root.is-embedded {
   color-scheme: light;
   --calc-err: #d93025;
   --calc-shadow: 0 1px 3px rgba(60, 64, 67, .15);
 }
 
-/* Paleta Gemini (zarówno z theme.css, jak i klasy .gemini w DarkPDF) */
-:root[data-mode="dark"][data-palette="gemini"],
-html.gemini,
-html.gemini .calc-root {
+/* Gemini – kolory ze wspólnej palety darkpdf/theme.css (tylko w trybie ciemnym) */
+html[data-mode="dark"][data-palette="gemini"] .calc-root,
+html.gemini .calc-root.is-embedded {
   --calc-bg: var(--gem-bg, #0b0c0d);
   --calc-panel: var(--gem-bg, #0b0c0d);
   --calc-key: var(--gem-hover, #282a2c);
@@ -46,11 +48,6 @@ html.gemini .calc-root {
   --calc-eq-line: var(--gem-accent-line, #3b5a8c);
   --calc-err: var(--gem-err, #f2b8b5);
   --calc-hint: var(--gem-fill, #1e1f20);
-  --calc-shadow: none;
-}
-
-:root[data-mode="dark"][data-palette="gemini"] body,
-html.gemini .calc-root {
   font-family: var(--gem-font, system-ui, sans-serif);
 }
 
@@ -64,7 +61,8 @@ html.gemini .calc-root {
   min-height: 100%;
   background: var(--calc-bg);
   color: var(--calc-text);
-  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;

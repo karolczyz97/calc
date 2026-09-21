@@ -1,7 +1,7 @@
 // Kalkulator – pamięć podręczna, dzięki której działa bez internetu.
 // Strona i motyw: najpierw z sieci, bez sieci – ostatnia zapisana wersja.
 // KaTeX z CDN ma stały numer wersji, więc bierzemy go od razu z pamięci.
-const CACHE = 'calc-v4';
+const CACHE = 'calc-v5';
 const CORE = ['./', 'index.html', 'calc.css', 'calc-app.js'];
 
 self.addEventListener('install', (e) => {

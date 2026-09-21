@@ -8,14 +8,14 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous" onload="window.onKatexLoaded && window.onKatexLoaded()"></script>
 <link rel="stylesheet" href="https://karolczyz97.github.io/darkpdf/theme.css?v=1">
-<link rel="stylesheet" href="calc.css?v=3">
+<link rel="stylesheet" href="calc.css?v=4">
 <style>
-  html, body {
-    margin: 0;
-    min-height: 100%;
-    background: var(--calc-bg);
-    color: var(--calc-text);
-  }
+  /* tło poza kalkulatorem (np. przy przewinięciu) w kolorze motywu */
+  html { color-scheme: dark; background: Canvas; }
+  html[data-mode="light"] { color-scheme: light; }
+  html[data-mode="dark"][data-palette="gemini"] { background: var(--gem-bg, #0b0c0d); }
+  body { margin: 0; }
+  #calc-app, #calc-app.calc-root { min-height: 100vh; }
 </style>
 </head>
 <body>
