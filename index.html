@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pl" data-theme="gemini">
+<html lang="pl" data-mode="dark" data-palette="gemini">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -9,55 +9,36 @@
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous" onload="window.onKatexLoaded && window.onKatexLoaded()"></script>
 <link rel="stylesheet" href="https://karolczyz97.github.io/darkpdf/theme.css?v=1">
 <style>
+/* Kolory = tryb (jasny / ciemny) × paleta (standardowa / Gemini).
+   Paleta standardowa bierze kolory z systemu (Windows / Chrome) przez systemowe kolory CSS,
+   więc sama przełącza się między jasnym i ciemnym – tak samo jak w czytniku DarkPDF. */
 :root {
-  --bg: #0b0c0d;
-  --panel: #0b0c0d;
-  --key: #282a2c;
-  --key-hi: #3c4043;
-  --key-fn: #1f2022;
-  --text: #e3e3e3;
-  --muted: #c4c7c5;
-  --faint: #9a9b9c;
-  --line: #2c2c2c;
-  --eq-bg: #1f3760;
-  --eq-text: #a8c7fa;
-  --eq-line: #3b5a8c;
-  --err: #f2b8b5;
-  --hint: #1e1f20;
-  --shadow: none;
   color-scheme: dark;
+  --bg: Canvas;
+  --panel: Canvas;
+  --text: CanvasText;
+  --muted: color-mix(in srgb, CanvasText 72%, Canvas);
+  --faint: GrayText;
+  --line: color-mix(in srgb, CanvasText 14%, Canvas);
+  --key: color-mix(in srgb, CanvasText 9%, Canvas);
+  --key-fn: color-mix(in srgb, CanvasText 5%, Canvas);
+  --key-hi: color-mix(in srgb, CanvasText 17%, Canvas);
+  --eq-bg: color-mix(in srgb, AccentColor 28%, Canvas);
+  --eq-text: CanvasText;
+  --eq-line: color-mix(in srgb, AccentColor 55%, Canvas);
+  --err: #ff8a7a;
+  --hint: color-mix(in srgb, CanvasText 12%, Canvas);
+  --shadow: none;
 }
-:root[data-theme="dark"] {
-  --bg: #0b0c0d; --panel: #0b0c0d; --key: #242628; --key-hi: #34373a; --key-fn: #1b1c1e;
-  --text: #e6e6e6; --muted: #9c9c9c; --faint: #6f6f6f; --line: #2c2c2c;
-  --eq-bg: #2f3439; --eq-text: #cfe0f5; --eq-line: #4a5460; --err: #ff8a7a; --shadow: none;
-}
-/* Motyw Gemini – kolory odczytane z panelu bocznego Chrome Gemini */
-:root[data-theme="gemini"] {   /* kolory ze wspólnej palety darkpdf/theme.css */
+:root[data-mode="light"] { color-scheme: light; --err: #d93025; --shadow: 0 1px 3px rgba(60, 64, 67, .15); }
+/* Gemini – kolory ze wspólnej palety darkpdf/theme.css (tylko w trybie ciemnym, jak w czytniku) */
+:root[data-mode="dark"][data-palette="gemini"] {
   --bg: var(--gem-bg); --panel: var(--gem-bg); --key: var(--gem-hover); --key-hi: var(--gem-hover-2); --key-fn: var(--gem-fill-2);
   --text: var(--gem-text); --muted: var(--gem-text-muted); --faint: var(--gem-text-dim); --line: var(--gem-line);
   --eq-bg: var(--gem-accent-bg); --eq-text: var(--gem-accent); --eq-line: var(--gem-accent-line);
   --err: var(--gem-err); --hint: var(--gem-fill); --shadow: none;
 }
-:root[data-theme="gemini"] body { font-family: var(--gem-font); }
-:root[data-theme="light"] {
-  --bg: #f1f3f4;
-  --panel: #ffffff;
-  --key: #e8eaed;
-  --key-hi: #dadce0;
-  --key-fn: #f8f9fa;
-  --text: #202124;
-  --muted: #5f6368;
-  --faint: #80868b;
-  --line: #dadce0;
-  --eq-bg: #1a73e8;
-  --eq-text: #ffffff;
-  --eq-line: #185abc;
-  --err: #d93025;
-  --hint: #ffffff;
-  --shadow: 0 1px 3px rgba(60, 64, 67, .15);
-  color-scheme: light;
-}
+:root[data-mode="dark"][data-palette="gemini"] body { font-family: var(--gem-font); }
 :root {
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
@@ -89,7 +70,9 @@ main {
 .seg { display: flex; gap: 2px; }
 .seg button { padding: 2px 7px; border-radius: 4px; color: var(--faint); }
 .seg button.on { background: var(--key-hi); color: var(--text); }
-.bar .icon { margin-left: auto; margin-right: 8px; padding: 2px 6px; border-radius: 4px; color: var(--faint); font-size: 15px; line-height: 1; }
+.bar .icons { margin-left: auto; margin-right: 8px; display: flex; gap: 2px; }
+html.embedded .bar .icons { display: none; }   /* w czytniku motywem steruje czytnik (D / T) */
+.bar .icon { padding: 2px 6px; border-radius: 4px; color: var(--faint); font-size: 15px; line-height: 1; }
 .bar .icon:hover { background: var(--key-hi); color: var(--text); }
 #expr {
   width: 100%; margin-top: 10px; padding: 6px 0; font-size: 20px;
@@ -236,7 +219,10 @@ html.embedded .panel { background: transparent !important; box-shadow: none !imp
           <button data-m="deg" title="Kąty w stopniach">DEG</button>
           <button data-m="rad" title="Kąty w radianach">RAD</button>
         </div>
-        <button id="themeBtn" class="icon" title="Motyw: systemowy / ciemny / jasny / Gemini (Ctrl+M)" aria-label="Motyw">◐</button>
+        <div class="icons">
+          <button id="modeBtn" class="icon" aria-label="Tryb jasny / ciemny / systemowy">☾</button>
+          <button id="paletteBtn" class="icon" aria-label="Paleta standardowa / Gemini">✦</button>
+        </div>
         <div class="seg" id="sig" title="Cyfry znaczące wyniku">
           <span style="padding:2px 4px">cyfry:</span>
           <button data-s="auto">auto</button><button data-s="2">2</button><button data-s="3">3</button><button data-s="4">4</button><button data-s="5">5</button>
@@ -667,7 +653,15 @@ const store = {
 let angle = store.get('angle', 'deg');
 let sig = store.get('sig', 'auto');
 let vars = store.get('vars', {});
-let uiTheme = store.get('theme', 'auto');   // 'auto' | 'dark' | 'light' | 'gemini'
+// Motyw = tryb (ciemny / jasny / jak w systemie) × paleta (standardowa z systemu / Gemini)
+let colorMode = store.get('colorMode', null);
+let palette = store.get('palette', null);
+if (!colorMode) {                                   // przejście ze starego jednego przełącznika
+  const old = store.get('theme', 'auto');
+  colorMode = old === 'light' ? 'light' : old === 'auto' ? 'auto' : 'dark';
+  palette = old === 'gemini' ? 'gemini' : 'system';
+}
+if (!['gemini', 'system'].includes(palette)) palette = 'system';
 let hist = store.get('hist', []);
 let ans = hist.length ? { v: hist[0].v, u: hist[0].u || {} } : { v: 0, u: {} };
 let histPos = -1;
@@ -1376,21 +1370,40 @@ function renderConsts() {
   }
 }
 
-const THEMES = ['auto', 'dark', 'light', 'gemini'];
-const THEME_ICON = { auto: '◐', dark: '●', light: '○', gemini: '✦' };
+const MODES = ['dark', 'light', 'auto'];
+const MODE_ICON = { dark: '☾', light: '☀', auto: '◐' };
+const MODE_NAME = { dark: 'ciemny', light: 'jasny', auto: 'jak w systemie' };
 const systemDark = matchMedia('(prefers-color-scheme: dark)');
+
 function applyTheme() {
-  // „systemowy” rozwiązujemy tutaj, więc w CSS jest tylko jeden zestaw kolorów na motyw
-  const t = uiTheme === 'auto' ? (systemDark.matches ? 'dark' : 'light') : uiTheme;
-  document.documentElement.setAttribute('data-theme', t);
-  $('themeBtn').textContent = THEME_ICON[uiTheme] || '◐';
+  const dark = colorMode === 'auto' ? systemDark.matches : colorMode === 'dark';
+  document.documentElement.setAttribute('data-mode', dark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-palette', palette);
+  $('modeBtn').textContent = MODE_ICON[colorMode];
+  $('modeBtn').title = `Tryb: ${MODE_NAME[colorMode]} – kliknij: ciemny / jasny / systemowy (Ctrl+M)`;
+  $('paletteBtn').textContent = palette === 'gemini' ? '✦' : '▣';
+  $('paletteBtn').title = `Kolory: ${palette === 'gemini' ? 'Gemini' : 'standardowe (systemowe)'} – kliknij, żeby zmienić (Ctrl+Shift+M)`;
 }
-systemDark.addEventListener('change', () => { if (uiTheme === 'auto') applyTheme(); });
-function cycleTheme() {
-  uiTheme = THEMES[(THEMES.indexOf(uiTheme) + 1) % THEMES.length];
-  store.set('theme', uiTheme);
+systemDark.addEventListener('change', () => { if (colorMode === 'auto') applyTheme(); });
+
+function cycleMode() {
+  colorMode = MODES[(MODES.indexOf(colorMode) + 1) % MODES.length];
+  store.set('colorMode', colorMode);
   applyTheme();
-  flash(uiTheme === 'auto' ? 'Motyw: systemowy' : uiTheme === 'dark' ? 'Motyw: ciemny' : uiTheme === 'light' ? 'Motyw: jasny' : 'Motyw: Gemini');
+  flash(`Tryb: ${MODE_NAME[colorMode]}`);
+}
+function togglePalette() {
+  palette = palette === 'gemini' ? 'system' : 'gemini';
+  store.set('palette', palette);
+  applyTheme();
+  flash(palette === 'gemini' ? 'Kolory: Gemini' : 'Kolory: standardowe (systemowe)');
+}
+// Ctrl+M zmienia tryb, Ctrl+Shift+M paletę
+function themeKey(e) {
+  if (!(e.ctrlKey || e.metaKey) || (e.key !== 'm' && e.key !== 'M')) return false;
+  e.preventDefault();
+  e.shiftKey ? togglePalette() : cycleMode();
+  return true;
 }
 
 function renderModes() {
@@ -1405,7 +1418,7 @@ expr.addEventListener('input', () => {
   livePreview();
 });
 expr.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); cycleTheme(); return; }
+  if (themeKey(e)) return;
   if (e.key === 'Enter') { e.preventDefault(); run(); }
   else if (e.key === 'Escape') { expr.value = ''; histPos = -1; livePreview(); }
   else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -1456,7 +1469,8 @@ $('sig').addEventListener('click', (e) => {
   sig = b.dataset.s; store.set('sig', sig); renderModes(); livePreview(); renderHist(); renderVars();
   if (hist.length) showResult(lastExpr.textContent || hist[0].e + ' =', hist[0].v, hist[0].u, hist[0].units);
 });
-$('themeBtn').addEventListener('click', cycleTheme);
+$('modeBtn').addEventListener('click', cycleMode);
+$('paletteBtn').addEventListener('click', togglePalette);
 $('search').addEventListener('input', renderConsts);
 $('clearHist').addEventListener('click', () => { hist = []; store.set('hist', hist); renderHist(); });
 // Kliknięcie w wynik wstawia go do wyrażenia, podwójne kopiuje do schowka.
@@ -1476,7 +1490,7 @@ result.addEventListener('dblclick', async () => {
   try { await navigator.clipboard.writeText(t); flash('Skopiowano: ' + t); } catch {}
 });
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); cycleTheme(); return; }
+  if (themeKey(e)) return;
   // pisanie gdziekolwiek trafia do pola wyrażenia
   if (document.activeElement === expr || document.activeElement === $('search')) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1501,9 +1515,16 @@ if (isEmbed) {
     document.documentElement.setAttribute('data-show-side', '1');
   }
 }
-if (urlParams.get('theme') && THEMES.includes(urlParams.get('theme'))) {
-  uiTheme = urlParams.get('theme');
+// Czytnik przekazuje tryb i paletę (starszy parametr theme= też rozumiemy)
+function takeTheme(mode, pal, old) {
+  if (MODES.includes(mode)) colorMode = mode;
+  if (['gemini', 'system'].includes(pal)) palette = pal;
+  if (!mode && old) {
+    colorMode = old === 'light' ? 'light' : old === 'auto' ? 'auto' : 'dark';
+    palette = old === 'gemini' ? 'gemini' : 'system';
+  }
 }
+takeTheme(urlParams.get('mode'), urlParams.get('palette'), urlParams.get('theme'));
 
 // ---- start ----
 applyTheme();
@@ -1529,8 +1550,8 @@ if (isEmbed) {
   });
   window.addEventListener('message', (e) => {
     if (e.source !== window.parent) return;                  // przyjmujemy tylko od czytnika, który nas osadził
-    if (e.data && e.data.type === 'darkpdf_theme' && THEMES.includes(e.data.theme)) {
-      uiTheme = e.data.theme;
+    if (e.data && e.data.type === 'darkpdf_theme') {
+      takeTheme(e.data.mode, e.data.palette, e.data.theme);
       applyTheme();
     }
   });
