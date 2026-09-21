@@ -446,12 +446,17 @@ function parseUnit(str) {
   return expr();
 }
 
+// Jednostka rozbita na licznik i mianownik – wspólne dla zapisu tekstowego i LaTeX
+function uSplit(u, part) {
+  const keys = Object.keys(u || {}).filter((k) => Math.abs(u[k]) > 1e-9).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+  return {
+    top: keys.filter((k) => u[k] > 0).map((k) => part(k, u[k])),
+    bot: keys.filter((k) => u[k] < 0).map((k) => part(k, -u[k]))
+  };
+}
+
 function uText(u) {
-  if (!u) return '';
-  const keys = Object.keys(u).filter((k) => Math.abs(u[k]) > 1e-9).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
-  const part = (k, e) => k + (e === 1 ? '' : supNum(e));
-  const top = keys.filter((k) => u[k] > 0).map((k) => part(k, u[k]));
-  const bot = keys.filter((k) => u[k] < 0).map((k) => part(k, -u[k]));
+  const { top, bot } = uSplit(u, (k, e) => k + (e === 1 ? '' : supNum(e)));
   if (!top.length && !bot.length) return '';
   if (!bot.length) return top.join('·');
   const den = bot.length > 1 ? `(${bot.join('·')})` : bot[0];
@@ -459,15 +464,8 @@ function uText(u) {
 }
 
 function uTex(u) {
-  if (!u) return '';
-  const keys = Object.keys(u).filter((k) => Math.abs(u[k]) > 1e-9).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
-  const part = (k, e) => {
-    if (e === 1) return `\\text{${k}}`;
-    if (e === 0.5) return `\\sqrt{\\text{${k}}}`;
-    return `\\text{${k}}^{${e}}`;
-  };
-  const top = keys.filter((k) => u[k] > 0).map((k) => part(k, u[k]));
-  const bot = keys.filter((k) => u[k] < 0).map((k) => part(k, -u[k]));
+  const { top, bot } = uSplit(u, (k, e) =>
+    e === 1 ? `\\text{${k}}` : e === 0.5 ? `\\sqrt{\\text{${k}}}` : `\\text{${k}}^{${e}}`);
   if (!top.length && !bot.length) return '';
   if (!bot.length) return top.join(' \\cdot ');
   const num = top.length ? top.join(' \\cdot ') : '1';
@@ -1030,40 +1028,16 @@ function unitWalk(n) {
   return plain({});
 }
 
+// Druga linia: działanie na jednostkach = wynik w SI = nazwa jednostki (bez powtórzeń)
 function unitLine(tree) {
   const w = unitWalk(tree);
   if (w.bare) return null;
-  const res = uText(w.u) || '1';
-  const resTex = uTex(w.u) || '1';
   const name = uName(w.u);
-  const nameTex = name ? `\\text{${name}}` : null;
-  const cleanExpr = w.text.trim();
-  const cleanTex = w.tex.trim();
-
-  let textOut = '';
-  let texOut = '';
-
-  if (name && name !== res) {
-    if (cleanExpr !== res && cleanExpr !== name) {
-      textOut = `${cleanExpr} = ${res} = ${name}`;
-      texOut = `${cleanTex} = ${resTex} = ${nameTex}`;
-    } else {
-      textOut = `${cleanExpr} = ${name}`;
-      texOut = `${cleanTex} = ${nameTex}`;
-    }
-  } else if (cleanExpr !== res) {
-    textOut = `${cleanExpr} = ${res}`;
-    texOut = `${cleanTex} = ${resTex}`;
-  } else {
-    textOut = res;
-    texOut = resTex;
-  }
-
-  return createUnitTrace(textOut, `\\displaystyle ${texOut}`);
-}
-
-function createUnitTrace(text, tex) {
-  return { text, tex };
+  const steps = [[w.text.trim(), w.tex.trim()], [uText(w.u) || '1', uTex(w.u) || '1']];
+  if (name) steps.push([name, `\\text{${name}}`]);
+  const uniq = steps.filter((st, i) => steps.findIndex((o) => o[0] === st[0]) === i);
+  if (uniq.length === 1) return null;            // sama jednostka – widać ją już przy wyniku
+  return { text: uniq.map((st) => st[0]).join(' = '), tex: '\\displaystyle ' + uniq.map((st) => st[1]).join(' = ') };
 }
 
 // Domykanie nawiasów: brakujący otwierający dopisujemy najdalej w lewo
