@@ -7,6 +7,7 @@
 <!-- KaTeX LaTeX math rendering -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous" onload="window.onKatexLoaded && window.onKatexLoaded()"></script>
+<link rel="stylesheet" href="https://karolczyz97.github.io/darkpdf/theme.css?v=1">
 <style>
 :root {
   --bg: #0b0c0d;
@@ -32,14 +33,13 @@
   --eq-bg: #2f3439; --eq-text: #cfe0f5; --eq-line: #4a5460; --err: #ff8a7a; --shadow: none;
 }
 /* Motyw Gemini – kolory odczytane z panelu bocznego Chrome Gemini */
-:root[data-theme="gemini"] {
-  --bg: #0b0c0d; --panel: #0b0c0d; --key: #282a2c; --key-hi: #3c4043; --key-fn: #1f2022;
-  --text: #e3e3e3; --muted: #c4c7c5; --faint: #9a9b9c; --line: #2c2c2c;
-  --eq-bg: #1f3760; --eq-text: #a8c7fa; --eq-line: #3b5a8c; --err: #f2b8b5; --hint: #1e1f20; --shadow: none;
+:root[data-theme="gemini"] {   /* kolory ze wspólnej palety darkpdf/theme.css */
+  --bg: var(--gem-bg); --panel: var(--gem-bg); --key: var(--gem-hover); --key-hi: var(--gem-hover-2); --key-fn: var(--gem-fill-2);
+  --text: var(--gem-text); --muted: var(--gem-text-muted); --faint: var(--gem-text-dim); --line: var(--gem-line);
+  --eq-bg: var(--gem-accent-bg); --eq-text: var(--gem-accent); --eq-line: var(--gem-accent-line);
+  --err: var(--gem-err); --hint: var(--gem-fill); --shadow: none;
 }
-:root[data-theme="gemini"] body {
-  font-family: "Google Sans Flex", "Google Sans", "Helvetica Neue", system-ui, sans-serif;
-}
+:root[data-theme="gemini"] body { font-family: var(--gem-font); }
 :root[data-theme="light"] {
   --bg: #f1f3f4;
   --panel: #ffffff;
