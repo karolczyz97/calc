@@ -27,13 +27,13 @@
   color-scheme: dark;
 }
 :root[data-theme="dark"] {
-  --bg: #161616; --panel: #1e1e1e; --key: #272727; --key-hi: #323232; --key-fn: #222;
-  --text: #e6e6e6; --muted: #9c9c9c; --faint: #6f6f6f; --line: rgba(255,255,255,.07);
+  --bg: #0b0c0d; --panel: #0b0c0d; --key: #242628; --key-hi: #34373a; --key-fn: #1b1c1e;
+  --text: #e6e6e6; --muted: #9c9c9c; --faint: #6f6f6f; --line: #2c2c2c;
   --eq-bg: #2f3439; --eq-text: #cfe0f5; --eq-line: #4a5460; --err: #ff8a7a; --shadow: none;
 }
 /* Motyw Gemini – kolory odczytane z panelu bocznego Chrome Gemini */
 :root[data-theme="gemini"] {
-  --bg: #0f0f0f; --panel: #1e1f20; --key: #282a2c; --key-hi: #3c4043; --key-fn: #1f2022;
+  --bg: #0b0c0d; --panel: #0b0c0d; --key: #282a2c; --key-hi: #3c4043; --key-fn: #1f2022;
   --text: #e3e3e3; --muted: #c4c7c5; --faint: #9a9b9c; --line: #2c2c2c;
   --eq-bg: #1f3760; --eq-text: #a8c7fa; --eq-line: #3b5a8c; --err: #f2b8b5; --hint: #1e1f20; --shadow: none;
 }
@@ -124,6 +124,7 @@ html.embedded[data-show-side="1"] .side { margin-top: 14px; position: static; ma
 html.embedded[data-bg="transparent"], html.embedded[data-bg="transparent"] body { background: transparent !important; }
 html.embedded[data-hide-keys="1"] #keys { display: none !important; }
 html.embedded[data-hide-hist="1"] .hist { display: none !important; }
+html.embedded .panel { background: transparent !important; box-shadow: none !important; border-radius: 0 !important; }
 
 /* ---- klawiatura ---- */
 .keys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 12px; }
