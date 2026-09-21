@@ -218,7 +218,7 @@ html.embedded .panel { background: transparent !important; box-shadow: none !imp
           <button data-m="deg" title="Kąty w stopniach">DEG</button>
           <button data-m="rad" title="Kąty w radianach">RAD</button>
         </div>
-        <button id="themeBtn" class="icon" title="Motyw: systemowy / ciemny / Gemini (Ctrl+M)" aria-label="Motyw">◐</button>
+        <button id="themeBtn" class="icon" title="Motyw: systemowy / ciemny / jasny / Gemini (Ctrl+M)" aria-label="Motyw">◐</button>
         <div class="seg" id="sig" title="Cyfry znaczące wyniku">
           <span style="padding:2px 4px">cyfry:</span>
           <button data-s="auto">auto</button><button data-s="2">2</button><button data-s="3">3</button><button data-s="4">4</button><button data-s="5">5</button>
@@ -651,7 +651,7 @@ const store = {
 let angle = store.get('angle', 'deg');
 let sig = store.get('sig', 'auto');
 let vars = store.get('vars', {});
-let uiTheme = store.get('theme', 'auto');   // 'auto' | 'dark' | 'gemini'
+let uiTheme = store.get('theme', 'auto');   // 'auto' | 'dark' | 'light' | 'gemini'
 let hist = store.get('hist', []);
 let ans = hist.length ? { v: hist[0].v, u: hist[0].u || {} } : { v: 0, u: {} };
 let histPos = -1;
@@ -1384,21 +1384,21 @@ function renderConsts() {
   }
 }
 
-const THEMES = ['auto', 'dark', 'gemini'];
-const THEME_ICON = { auto: '◐', dark: '●', gemini: '✦' };
+const THEMES = ['auto', 'dark', 'light', 'gemini'];
+const THEME_ICON = { auto: '◐', dark: '●', light: '○', gemini: '✦' };
 const systemDark = matchMedia('(prefers-color-scheme: dark)');
 function applyTheme() {
   // „systemowy” rozwiązujemy tutaj, więc w CSS jest tylko jeden zestaw kolorów na motyw
   const t = uiTheme === 'auto' ? (systemDark.matches ? 'dark' : 'light') : uiTheme;
   document.documentElement.setAttribute('data-theme', t);
-  $('themeBtn').textContent = THEME_ICON[uiTheme];
+  $('themeBtn').textContent = THEME_ICON[uiTheme] || '◐';
 }
 systemDark.addEventListener('change', () => { if (uiTheme === 'auto') applyTheme(); });
 function cycleTheme() {
   uiTheme = THEMES[(THEMES.indexOf(uiTheme) + 1) % THEMES.length];
   store.set('theme', uiTheme);
   applyTheme();
-  flash(uiTheme === 'auto' ? 'Motyw: systemowy' : uiTheme === 'dark' ? 'Motyw: ciemny' : 'Motyw: Gemini');
+  flash(uiTheme === 'auto' ? 'Motyw: systemowy' : uiTheme === 'dark' ? 'Motyw: ciemny' : uiTheme === 'light' ? 'Motyw: jasny' : 'Motyw: Gemini');
 }
 
 function renderModes() {
