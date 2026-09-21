@@ -1318,6 +1318,8 @@ export function mountCalculator(container, options = {}) {
     if (document.activeElement === expr || document.activeElement === searchEl) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (isEmbedded && !container.contains(document.activeElement)) return;
+    // W DarkPDF litery poza polem działania to skróty czytnika (D, T, P…) – nie przerzucamy ich do pola
+    if (isEmbedded && /^[a-zA-Z?]$/.test(e.key)) return;
     if (e.key.length === 1 || e.key === 'Enter' || e.key === 'Backspace') {
       expr.focus();
     }
