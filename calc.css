@@ -53,6 +53,7 @@ html.gemini .calc-root.is-embedded {
 
 /* ---- Główny kontener kalkulatora ---- */
 .calc-root {
+  position: relative;
   box-sizing: border-box;
   container-type: inline-size;
   display: flex;
@@ -238,6 +239,13 @@ html.gemini .calc-root.is-embedded {
   opacity: .95;
   overflow-x: auto;
   overflow-y: hidden;
+}
+
+.calc-root .preview-note {
+  color: var(--calc-faint);
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 3px;
 }
 
 .calc-root .calc-last-expr {
@@ -630,18 +638,25 @@ html.gemini .calc-root.is-embedded {
 }
 
 /* Toast hint */
+.calc-root .calc-hint,
 .calc-hint {
-  position: fixed;
+  position: absolute;
   left: 50%;
-  top: calc(12px + env(safe-area-inset-top, 0px));
+  top: 12px;
   transform: translateX(-50%);
-  padding: 6px 12px;
+  padding: 6px 14px;
   border-radius: 6px;
-  background: var(--calc-hint);
-  color: #eee;
+  background: var(--calc-panel);
+  color: var(--calc-text);
+  border: 1px solid var(--calc-line);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   font-size: 13px;
   pointer-events: none;
   z-index: 100;
+  max-width: calc(100% - 24px);
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .calc-hint[hidden] {
