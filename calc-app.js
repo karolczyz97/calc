@@ -1,7 +1,7 @@
 // calc-app.js – interfejs kalkulatora naukowego (samodzielna strona i panel w DarkPDF).
 // Obliczenia, jednostki i formatowanie liczb są w calc-engine.js.
 
-import { CalcError, CONSTS, CONST, evaluate, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js?v=1';
+import { CalcError, CONSTS, CONST, evaluate, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js?v=2';
 
 export { CalcError };
 

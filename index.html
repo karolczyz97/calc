@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous" onload="window.onKatexLoaded && window.onKatexLoaded()"></script>
 <link rel="stylesheet" href="https://karolczyz97.github.io/darkpdf/theme.css?v=1">
-<link rel="stylesheet" href="calc.css?v=6">
+<link rel="stylesheet" href="calc.css?v=7">
 <style>
   /* tło poza kalkulatorem (np. przy przewinięciu) w kolorze motywu */
   html { color-scheme: dark; background: Canvas; }
@@ -22,7 +22,7 @@
 <div id="calc-app"></div>
 
 <script type="module">
-  import { mountCalculator } from './calc-app.js?v=5';
+  import { mountCalculator } from './calc-app.js?v=6';
 
   const appEl = document.getElementById('calc-app');
   const calc = mountCalculator(appEl, { isEmbedded: false });

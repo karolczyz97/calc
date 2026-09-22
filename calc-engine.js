@@ -479,8 +479,9 @@ const FUNCS = dict({
 FUNCS['√'] = FUNCS.sqrt;
 
 // ================= Tokenizer =================
-// Liczba: 9,81 · 1,5e3 · ,5 · 384 400 (grupy po 3 cyfry oddzielone spacją, także twardą i wąską)
-const NUM_RE = /^(?:\d{1,3}(?:[ \u00a0\u2007\u2009\u202f]\d{3})+(?!\d)|\d+)(?:[.,]\d+)?(?:[eE][+-]?\d+)?|^[.,]\d+(?:[eE][+-]?\d+)?/;
+// Liczba: 9,81 · 1,5e3 · ,5 · 384 400 · 6,626 070 15 (grupy po 3 cyfry oddzielone spacją, także twardą i wąską).
+// Po przecinku grupy liczą się tylko wtedy, gdy pierwsza ma dokładnie 3 cyfry (zapis z tablic) – „2,5 3” to dalej 2,5·3.
+const NUM_RE = /^(?:\d{1,3}(?:[ \u00a0\u2007\u2009\u202f]\d{3})+(?!\d)|\d+)(?:[.,]\d{3}(?:[ \u00a0\u2007\u2009\u202f]\d{3})*[ \u00a0\u2007\u2009\u202f]\d{1,3}(?!\d)|[.,]\d+)?(?:[eE][+-]?\d+)?|^[.,]\d+(?:[eE][+-]?\d+)?/;
 const GROUP_SEP = /[ \u00a0\u2007\u2009\u202f]/g;
 const OP_MAP = dict({ '×': '*', '·': '*', '⋅': '*', '∙': '*', '÷': '/', '−': '-', '–': '-', ';': ',' });
 const OPS = '+-*/^()!%=,√°';

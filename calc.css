@@ -19,7 +19,6 @@
   --calc-eq-text: CanvasText;
   --calc-eq-line: color-mix(in srgb, AccentColor 55%, Canvas);
   --calc-err: #ff8a7a;
-  --calc-hint: color-mix(in srgb, CanvasText 12%, Canvas);
   --calc-shadow: none;
 }
 
@@ -47,7 +46,6 @@ html.gemini .calc-root.is-embedded {
   --calc-eq-text: var(--gem-accent, #a8c7fa);
   --calc-eq-line: var(--gem-accent-line, #3b5a8c);
   --calc-err: var(--gem-err, #f2b8b5);
-  --calc-hint: var(--gem-fill, #1e1f20);
   font-family: var(--gem-font, system-ui, sans-serif);
 }
 
