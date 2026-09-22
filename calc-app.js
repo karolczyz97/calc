@@ -1,22 +1,19 @@
-// calc-app.js – Interfejs kalkulatora naukowego (UI + montowanie)
-// Silnik obliczeniowy i redukcji jednostek znajduje się w osobnym module calc-engine.js
-// Działa jako samodzielna aplikacja oraz osadzony komponent w DarkPDF
+// calc-app.js – interfejs kalkulatora naukowego (samodzielna strona i panel w DarkPDF).
+// Obliczenia, jednostki i formatowanie liczb są w calc-engine.js.
 
-export * from './calc-engine.js';
-import {
-  CalcError,
-  CONSTS,
-  CONST,
-  calc as calcEngine,
-  fmt,
-  exactText,
-  toFraction,
-  fracHtml,
-  uName,
-  uText,
-  uInline,
-  setAngleMode
-} from './calc-engine.js';
+import { CalcError, CONSTS, CONST, evaluate, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js?v=1';
+
+export { CalcError };
+
+function fracHtml(f) {
+  const stack = (n, d) => `<span class="frac"><span>${n}</span><span>${d}</span></span>`;
+  const sign = f.n < 0 ? '−' : '';
+  const n = Math.abs(f.n);
+  let html = sign + stack(n, f.d);
+  if (n > f.d) html += ` = ${sign}${Math.floor(n / f.d)} ${stack(n % f.d, f.d)}`;
+  return html;
+}
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const norm = (s) => s.toLowerCase().replace(/ł/g, 'l').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
@@ -31,9 +28,8 @@ export function mountCalculator(container, options = {}) {
   };
 
   let angle = store.get('angle', 'deg');
-  setAngleMode(angle);
   let sig = store.get('sig', 'auto');
-  let vars = store.get('vars', {});
+  let vars = Object.assign(Object.create(null), store.get('vars', {}));   // bez prototypu: zmienna „constructor” to zwykła nazwa
   let hist = store.get('hist', []);
   let ans = hist.length ? { v: hist[0].v, u: hist[0].u || {} } : { v: 0, u: {} };
   let histPos = -1;
@@ -116,7 +112,8 @@ export function mountCalculator(container, options = {}) {
           <b>Enter</b> oblicz · <b>↑ ↓</b> historia · <b>Esc</b> wyczyść ·
           część dziesiętna po przecinku <code>9,81</code>, argumenty oddziel średnikiem <code>root(8; 3)</code> ·
           zmienne: <code>v = 12m/s</code> ·
-          jednostki: <code>5kg*2</code>, <code>5m/s*2</code>, <code>100km/2h</code>, <code>G*MZ/RZ^2</code>
+          jednostki: <code>5kg*2</code>, <code>5m/s*2</code>, <code>100km/2h</code>, <code>G*MZ/RZ^2</code> ·
+          litery za liczbą to jednostka (<code>10 m</code>), zmienną mnóż jawnie: <code>10*m</code>
         </div>
       </section>
 
@@ -178,9 +175,7 @@ export function mountCalculator(container, options = {}) {
     el.innerHTML = fallbackHtml !== undefined ? fallbackHtml : (tex || '');
   }
 
-  function runCalc(raw) {
-    return calcEngine(raw, vars, ans);
-  }
+  const calc = (raw) => evaluate(raw, { vars, ans, angle });
 
   let lastSel = null;
   expr.addEventListener('blur', () => { lastSel = [expr.selectionStart, expr.selectionEnd]; });
@@ -204,17 +199,15 @@ export function mountCalculator(container, options = {}) {
     const src = expr.value.trim();
     if (!src) { preview.textContent = ''; return; }
     try {
-      const { assign, v, u, src: full, units, notes } = runCalc(src);
+      const { assign, v, u, src: full, units, notes } = calc(src);
       const fr = toFraction(v);
-      const uStr = uName(u) || uText(u);
+      const uStr = unitLabel(u);
       const shown = full !== src ? esc(full) + ' ' : '';
       let html = shown + (assign ? esc(assign) + ' ' : '') + '= ' + fmt(v, sig).html + (uStr ? ' ' + esc(uStr) : '') + (fr ? ' = ' + fracHtml(fr) + (uStr ? ' ' + esc(uStr) : '') : '');
-      if (notes && notes.length) {
-        html += `<div class="preview-note">${esc(notes[0])}</div>`;
-      }
       if (units) {
         html += `<div class="preview-units" data-tex="${esc(units.tex)}">${esc(units.text)}</div>`;
       }
+      for (const note of notes) html += `<div class="preview-note">${esc(note)}</div>`;
       preview.innerHTML = html;
       const prevUnitsEl = preview.querySelector('.preview-units');
       if (prevUnitsEl && window.katex) {
@@ -231,11 +224,10 @@ export function mountCalculator(container, options = {}) {
   function showResult(label, v, u = {}, units = null) {
     lastExpr.textContent = label;
     const f = fmt(v, sig);
-    const uStr = uName(u) || uText(u);
+    const uStr = unitLabel(u);
     result.innerHTML = f.html + (uStr ? `<span class="u">${esc(uStr)}</span>` : '');
-    const uIn = uInline(u);
-    result.dataset.copy = exactText(v) + (uStr ? ' ' + uStr : '');
-    result.dataset.insert = exactText(v) + (uIn ? ' ' + uIn : '');
+    result.dataset.copy = copyText(v, u);
+    result.dataset.insert = insertText(v, u);
 
     if (unitTrack) {
       if (units) {
@@ -256,7 +248,7 @@ export function mountCalculator(container, options = {}) {
     const src = expr.value.trim();
     if (!src) return;
     try {
-      const { assign, v, u, src: full, units, notes } = runCalc(src);
+      const { assign, v, u, src: full, units, notes } = calc(src);
       if (assign) {
         vars[assign] = { v, u };
         store.set('vars', vars);
@@ -272,8 +264,9 @@ export function mountCalculator(container, options = {}) {
       lastSel = null;
       preview.textContent = '';
       renderHist();
-      if (assign && assign in CONST) flash(`${assign} przesłania teraz stałą „${CONST[assign].name}”`, 2500);
-      else if (notes && notes.length) flash(notes[0], 2500);
+      const msgs = [...notes];
+      if (assign && assign in CONST) msgs.push(`${assign} przesłania teraz stałą „${CONST[assign].name}”`);
+      if (msgs.length) flash(msgs.join('\n'), notes.length ? 4000 : 2500);
     } catch (e) {
       preview.classList.add('err');
       preview.textContent = e instanceof CalcError ? e.message : 'Błąd: ' + e.message;
@@ -307,12 +300,11 @@ export function mountCalculator(container, options = {}) {
     histEl.replaceChildren();
     histEmptyEl.hidden = hist.length > 0;
     hist.forEach((h) => {
-      const uStr = h.u ? (uName(h.u) || uText(h.u)) : '';
+      const uStr = h.u ? unitLabel(h.u) : '';
       const resHtml = '= ' + fmt(h.v, sig).html + (uStr ? ' ' + esc(uStr) : '');
-      const uIn = h.u ? uInline(h.u) : '';
       const li = row('', h.e, { html: resHtml },
         () => insertExpr(h.e),
-        () => insert(exactText(h.v) + (uIn ? ' ' + uIn : '')));
+        () => insert(insertText(h.v, h.u || {})));
       li.firstChild.title = h.e + '  (kliknij, żeby wstawić)';
       li.lastChild.title = 'Wstaw wynik w miejsce kursora';
       if (h.units) {
@@ -333,7 +325,7 @@ export function mountCalculator(container, options = {}) {
       const val = vars[n];
       const num = (typeof val === 'object' && val !== null && 'v' in val) ? val.v : val;
       const u = (typeof val === 'object' && val !== null && 'u' in val) ? val.u : {};
-      const uStr = uName(u) || uText(u);
+      const uStr = unitLabel(u);
       const li = document.createElement('li');
       const b = document.createElement('button');
       b.className = 'row';
@@ -445,7 +437,6 @@ export function mountCalculator(container, options = {}) {
   });
 
   expr.addEventListener('keydown', (e) => {
-    if (themeKey(e)) return;
     if (e.key === 'Enter') {
       e.preventDefault();
       run();
@@ -502,7 +493,6 @@ export function mountCalculator(container, options = {}) {
   angleEl.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     angle = b.dataset.m;
-    setAngleMode(angle);
     store.set('angle', angle);
     renderModes();
     livePreview();
@@ -527,14 +517,7 @@ export function mountCalculator(container, options = {}) {
 
   searchEl.addEventListener('input', renderConsts);
   clearHistBtn.addEventListener('click', () => { hist = []; store.set('hist', hist); renderHist(); });
-  if (clearVarsBtn) {
-    clearVarsBtn.addEventListener('click', () => {
-      vars = {};
-      store.set('vars', vars);
-      renderVars();
-      livePreview();
-    });
-  }
+  clearVarsBtn.addEventListener('click', () => { vars = Object.create(null); store.set('vars', vars); renderVars(); livePreview(); });
 
   let resultClickTimer = null;
   result.addEventListener('click', () => {

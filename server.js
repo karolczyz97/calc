@@ -13,7 +13,7 @@ const server = http.createServer((req, res) => {
   }
   if (file === '/' || file === '') file = '/index.html';
   const filePath = path.join(__dirname, file);
-  if (!filePath.startsWith(__dirname)) {
+  if (filePath !== __dirname && !filePath.startsWith(__dirname + path.sep)) {   // katalog obok o podobnej nazwie (calc-kopia) też się nie liczy
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end('403 Forbidden');
   }
