@@ -1,7 +1,7 @@
 // calc-app.js – interfejs kalkulatora naukowego (samodzielna strona i panel w DarkPDF).
 // Obliczenia, jednostki i formatowanie liczb są w calc-engine.js.
 
-import { CalcError, CONSTS, CONST, evaluate, complete, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js';
+import { CalcError, CONSTS, CONST, evaluate, complete, stripAssign, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js';
 
 const GROUPS_CLOSED = ['Mechanika', 'Elektryczność i magnetyzm', 'Termodynamika', 'Atom i kwanty', 'Astronomia', 'Układ Słoneczny', 'Przeliczniki', 'Matematyka'];
 const MODES = ['dark', 'light', 'auto'];
@@ -356,8 +356,7 @@ export function mountCalculator(container, options = {}) {
   }
 
   function insertExpr(text) {
-    const m = /^\s*[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03FF]*\s*=(.*)$/.exec(text);
-    let t = m ? m[1].trim() : text;
+    let t = stripAssign(text).trim();
     const simple = /^[A-Za-z0-9_,.\u0370-\u03FF]+$/.test(t);
     if (expr.value.trim() && !simple) t = '(' + t + ')';
     insertValue(t);

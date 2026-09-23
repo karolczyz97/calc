@@ -446,6 +446,7 @@ const FUNCS = dict({
   ln: [1, 1, (x) => Math.log(pos(x, 'ln'))],
   log: [1, 2, (x, b) => b === undefined ? Math.log10(pos(x, 'log')) : Math.log(pos(x, 'log')) / Math.log(pos(b, 'log (podstawa)'))],
   log2: [1, 1, (x) => Math.log2(pos(x, 'log2'))],
+  log10: [1, 1, (x) => Math.log10(pos(x, 'log10'))],   // bez tego log10(100) to log(10)·100 = 100
   exp: [1, 1, Math.exp],
   abs: [1, 1, Math.abs],
   round: [1, 2, roundTo],
@@ -497,6 +498,8 @@ function tokenize(src, vars, notes) {
     if (num) {
       const text = num[0];
       i += text.length;
+      // „1.000.000” albo „max(1,2,3)” dałyby po cichu 1·0,000·0,000 = 0 i max(1,2·0,3)
+      if (/^[.,]\d/.test(src.slice(i))) throw err('Dwa przecinki w jednej liczbie – tysiące oddzielaj spacją (1 000 000), argumenty średnikiem (max(1; 2; 3))');
       const v = parseFloat(text.replace(GROUP_SEP, '').replace(',', '.'));
       const tok = { k: 'num', v, u: {}, rawU: '', text };
       const pc = powerCtx();
@@ -526,12 +529,12 @@ function tokenize(src, vars, notes) {
     }
     if (ch === 'π' || ch === 'ħ') { t.push({ k: 'id', v: ch }); i++; continue; }
     if (ID_START.test(ch)) {
+      // sin30, ln2: sama nazwa funkcji, a liczbę (także 30,5) czyta gałąź liczb
       const m = ID_RE.exec(rest)[0];
-      const split = /^([A-Za-z]+)(\d+(?:[.,]\d+)?)$/.exec(m);
-      if (!known(m) && split && has(FUNCS, split[1])) {
-        t.push({ k: 'id', v: split[1] }, { k: 'num', v: parseFloat(split[2].replace(',', '.')), u: {}, rawU: '', text: split[2] });
-      } else t.push({ k: 'id', v: m });
-      i += m.length; continue;
+      const fn = /^([A-Za-z]+)\d+$/.exec(m)?.[1];
+      const name = !known(m) && has(FUNCS, fn) ? fn : m;
+      t.push({ k: 'id', v: name });
+      i += name.length; continue;
     }
     const op = OP_MAP[ch] || ch;
     if (OPS.includes(op)) {
@@ -550,7 +553,8 @@ function tokenize(src, vars, notes) {
 function parse(tokens, vars) {
   let p = 0;
   const peek = () => tokens[p];
-  const isOp = (v) => tokens[p] && tokens[p].k === 'op' && tokens[p].v === v;
+  const isOpAt = (i, v) => tokens[i]?.k === 'op' && tokens[i].v === v;
+  const isOp = (v) => isOpAt(p, v);
   const startsValue = (t) => t && (t.k === 'num' || t.k === 'unit' || t.k === 'id' || (t.k === 'op' && (t.v === '(' || t.v === '√')));
 
   function additive() {
@@ -609,12 +613,12 @@ function parse(tokens, vars) {
       }
       return { t: 'var', name: tok.v };
     }
-    if (tok.k === 'op' && tok.v === ')') throw err('Nadmiarowy nawias )');
+    if (tok.k === 'op' && tok.v === ')') throw err(isOpAt(p - 2, '(') ? 'Puste nawiasy ()' : 'Nadmiarowy nawias )');
     throw err(`Nieoczekiwany znak: ${tok.v}`);
   }
 
   let assign = null;
-  if (tokens.length >= 2 && tokens[0].k === 'id' && tokens[1].k === 'op' && tokens[1].v === '=') {
+  if (tokens[0]?.k === 'id' && isOpAt(1, '=')) {
     assign = tokens[0].v;
     if (has(FUNCS, assign)) throw err(`„${assign}” to nazwa funkcji – wybierz inną nazwę zmiennej`);
     if (assign === 'ans') throw err('„ans” jest zarezerwowane');
@@ -788,26 +792,31 @@ function unitLine(tree, vars, ans) {
   return { text: uniq.map((st) => st[0]).join(' = '), tex: '\\displaystyle ' + uniq.map((st) => st[1]).join(' = ') };
 }
 
-// Brakujące nawiasy: „(2+3” → „(2+3)”, „2+3)” → „(2+3)”
-function balance(src) {
-  let depth = 0, need = 0;
+// Niedomknięte „(” i nadmiarowe „)”
+function parens(src) {
+  let open = 0, extra = 0;
   for (const ch of src) {
-    if (ch === '(') depth++;
-    else if (ch === ')') { depth > 0 ? depth-- : need++; }
+    if (ch === '(') open++;
+    else if (ch === ')') { open > 0 ? open-- : extra++; }
   }
-  let out = src;
-  if (need) {
-    const m = /^\s*[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03FF]*\s*=\s*/.exec(out);
-    const at = m ? m[0].length : 0;
-    out = out.slice(0, at) + '('.repeat(need) + out.slice(at);
-  }
-  return out + ')'.repeat(depth);
+  return { open, extra };
+}
+
+// „nazwa = ” na początku działania
+const ASSIGN = /^\s*[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03FF]*\s*=\s*/;
+export const stripAssign = (s) => s.replace(ASSIGN, '');
+
+// Brakujące nawiasy: „(2+3” → „(2+3)”, „2+3)” → „(2+3)”, „x = 2+3)” → „x = (2+3)”
+function balance(src) {
+  const { open, extra } = parens(src);
+  const at = extra ? (ASSIGN.exec(src)?.[0].length ?? 0) : 0;
+  return src.slice(0, at) + '('.repeat(extra) + src.slice(at) + ')'.repeat(open);
 }
 
 // ================= Podpowiedź dokończenia =================
 // Wyszarzony tekst za kursorem: reszta nazwy (funkcja z „(”, stała, zmienna, ans) albo brakujące nawiasy.
 // complete('sq') → 'rt(', complete('2*rh') → 'ow', complete('sqrt(2*g*h') → ')'; nic do podpowiedzenia → ''
-const NAME_AT_END = /[A-Za-z_Ͱ-Ͽ][A-Za-z0-9_Ͱ-Ͽ]*$/;
+const NAME_AT_END = /[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03FF]*$/;
 const ENDS_WITH_OPERATOR = /[-+*/^(=;,×÷−–·⋅∙√]\s*$/;
 const MIN_PREFIX = 2;     // po jednej literze podpowiedzi byłoby za dużo (s → sin, sinh, sqrt, sigma…)
 
@@ -836,12 +845,7 @@ export function complete(src, vars = {}) {
     }
   }
   if (ENDS_WITH_OPERATOR.test(src)) return '';                          // „sqrt(2*” – jeszcze nie ma czego zamykać
-  let depth = 0;
-  for (const ch of src) {
-    if (ch === '(') depth++;
-    else if (ch === ')' && depth > 0) depth--;
-  }
-  return ')'.repeat(depth);
+  return ')'.repeat(parens(src).open);
 }
 
 // ================= Formatowanie liczb =================
