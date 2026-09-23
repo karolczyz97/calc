@@ -440,10 +440,9 @@ const FUNCS = dict({
 FUNCS['√'] = FUNCS.sqrt;
 
 // ================= Tokenizer =================
-// Liczba: 9,81 · 1,5e3 · ,5 · 384 400 · 6,626 070 15 (grupy po 3 cyfry oddzielone spacją, także twardą i wąską).
-// Po przecinku grupy liczą się tylko wtedy, gdy pierwsza ma dokładnie 3 cyfry (zapis z tablic) – „2,5 3” to dalej 2,5·3.
-const NUM_RE = /^(?:\d{1,3}(?:[ \u00a0\u2007\u2009\u202f]\d{3})+(?!\d)|\d+)(?:[.,]\d{3}(?:[ \u00a0\u2007\u2009\u202f]\d{3})*[ \u00a0\u2007\u2009\u202f]\d{1,3}(?!\d)|[.,]\d+)?(?:[eE][+-]?\d+)?|^[.,]\d+(?:[eE][+-]?\d+)?/;
-const GROUP_SEP = /[ \u00a0\u2007\u2009\u202f]/g;
+// Liczba: cyfry, najwyżej jeden przecinek (albo kropka) dziesiętny i wykładnik: 9,81 · 3.14 · ,5 · 1,5e3.
+// Dużych liczb nie dzielimy – ani spacją, ani kropką, ani przecinkiem: 1000000 albo 1e6.
+const NUM_RE = /^(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][+-]?\d+)?/;
 const OP_MAP = dict({ '×': '*', '·': '*', '⋅': '*', '∙': '*', '÷': '/', '−': '-', '–': '-', ';': ',' });
 const OPS = '+-*/^()!%=,√°';
 
@@ -483,9 +482,10 @@ function tokenize(src, vars, notes) {
     if (num) {
       const text = num[0];
       i += text.length;
-      // „1.000.000” albo „max(1,2,3)” dałyby po cichu 1·0,000·0,000 = 0 i max(1,2·0,3)
-      if (/^[.,]\d/.test(src.slice(i))) throw err('Dwa przecinki w jednej liczbie – tysiące oddzielaj spacją (1 000 000), argumenty średnikiem (max(1; 2; 3))');
-      const v = parseFloat(text.replace(GROUP_SEP, '').replace(',', '.'));
+      // Bez tych błędów „1.000.000”, „max(1,2,3)” i „1 000” dałyby po cichu 0, max(1,2·0,3) i 1·000 = 0
+      if (/^[.,]\d/.test(src.slice(i))) throw err('Za dużo przecinków w liczbie – dużych liczb nie dziel (pisz 1000000 albo 1e6), argumenty oddzielaj średnikiem: max(1; 2; 3)');
+      if (['num', 'unit'].includes(t.at(-1)?.k)) throw err('Dwie liczby obok siebie – dużych liczb nie dziel spacją (pisz 1000000), a mnożenie zapisz jawnie: 2*3');
+      const v = parseFloat(text.replace(',', '.'));
       const tok = { k: 'num', v, u: {}, rawU: '', text };
       const pc = powerCtx();
       t.push(tok);
@@ -812,7 +812,7 @@ export function complete(src, vars = {}) {
   if (word) {
     // litery zaraz za liczbą to jednostka (10 km/mi…) – tam nazw nie podpowiadamy
     const operand = src.slice(0, src.length - word.length).split(/[-+(=;,−–]/).pop();
-    if (!/^\s*[\d.,][\d\s.,]*[A-Za-zΩµμ]/.test(operand + word)) {
+    if (!/^\s*[\d.,]+\s*[A-Za-zΩµμ]/.test(operand + word)) {
       const all = names(vars);
       const exact = all.find(([n]) => n === word);
       if (exact?.[1]) return exact[1];                                  // sqrt → „(”
@@ -827,17 +827,8 @@ export function complete(src, vars = {}) {
 }
 
 // ================= Formatowanie liczb =================
-const NNBSP = '\u202f';
-
-function group(intStr) {
-  return intStr.length > 4 ? intStr.replace(/\B(?=(\d{3})+(?!\d))/g, NNBSP) : intStr;
-}
-
-function plainNum(numStr) {
-  const neg = numStr.startsWith('-');
-  const [i, d] = (neg ? numStr.slice(1) : numStr).split('.');
-  return (neg ? '−' : '') + group(i) + (d === undefined ? '' : ',' + d);
-}
+// Liczba do wyświetlenia tak, jak się ją wpisuje (bez dzielenia na tysiące), z typograficznym minusem
+const plainNum = (numStr) => numStr.replace('-', '−').replace('.', ',');
 
 export function fmt(x, sig = 'auto') {
   if (x === 0) return { html: '0', text: '0' };

@@ -10,6 +10,9 @@ const VARS = {m: {v: 2,u: {kg: 1}},s: {v: 100,u: {m: 1}},h: {v: 5,u: {m: 1}},t: 
 const CTX = { none: {}, vars: { vars: VARS }, rad: { angle: 'rad' }, ans: { ans: { v: 2, u: { kg: 1 } } } };
 const close = (a, b) => a === b || Math.abs(a - b) <= 1e-10 * Math.max(Math.abs(a), Math.abs(b));
 
+const COMMAS = 'Za dużo przecinków w liczbie – dużych liczb nie dziel (pisz 1000000 albo 1e6), argumenty oddzielaj średnikiem: max(1; 2; 3)';
+const TWO = 'Dwie liczby obok siebie – dużych liczb nie dziel spacją (pisz 1000000), a mnożenie zapisz jawnie: 2*3';
+
 // [wyrażenie, kontekst, oczekiwane]: [wartość w SI, jednostka, liczba notek (gdy są)] albo { err: komunikat }
 const CASES = [
   ["2+3*4", "none", [14, ""]],
@@ -83,20 +86,27 @@ const CASES = [
   [".5", "none", [0.5, ""]],
   ["5,", "none", { err: "Przecinek to część dziesiętna – argumenty oddzielaj średnikiem ;" }],
   ["5.", "none", { err: "Nieznany znak: ." }],
-  ["1.000.000", "none", { err: "Dwa przecinki w jednej liczbie – tysiące oddzielaj spacją (1 000 000), argumenty średnikiem (max(1; 2; 3))" }],
-  ["1,000,000", "none", { err: "Dwa przecinki w jednej liczbie – tysiące oddzielaj spacją (1 000 000), argumenty średnikiem (max(1; 2; 3))" }],
-  ["max(1,2,3)", "none", { err: "Dwa przecinki w jednej liczbie – tysiące oddzielaj spacją (1 000 000), argumenty średnikiem (max(1; 2; 3))" }],
+  // dużych liczb nie dzielimy: ani kropką, ani przecinkiem, ani spacją (także wąską ze skopiowanego tekstu)
+  ["1000000", "none", [1000000, ""]],
+  ["1.000.000", "none", { err: COMMAS }],
+  ["1,000,000", "none", { err: COMMAS }],
+  ["max(1,2,3)", "none", { err: COMMAS }],
+  ["1 000", "none", { err: TWO }],
+  ["1\u202f000", "none", { err: TWO }],
+  ["384 400 km", "none", { err: TWO }],
+  ["6,626 070 15·10⁻³⁴ J·s", "none", { err: TWO }],
+  ["2 3", "none", { err: TWO }],
+  ["2,5 3", "none", { err: TWO }],
+  ["2 1/2", "none", { err: TWO }],
+  ["6,62607015·10⁻³⁴ J·s", "none", [6.62607015e-34, "kg·m²/s"]],
+  ["299792458 m/s", "none", [299792458, "m/s"]],
+  ["384400 km", "none", [384400000, "m"]],
   ["(", "none", { err: "Puste nawiasy ()" }],
   ["2*(", "none", { err: "Puste nawiasy ()" }],
   ["sin30,5", "none", [0.507538362961, ""]],
   ["sqrt2", "none", [1.41421356237, ""]],
   ["log10(100)", "none", [2, ""]],
   ["log10(0)", "none", { err: "log10: argument musi być dodatni" }],
-  ["1 000", "none", [1000, ""]],
-  ["12 345", "none", [12345, ""]],
-  ["384 400", "none", [384400, ""]],
-  ["1234 567", "none", [699678, ""]],
-  ["2 3", "none", [6, ""]],
   ["pi", "none", [3.14159265359, ""]],
   ["π", "none", [3.14159265359, ""]],
   ["2π", "none", [6.28318530718, ""]],
@@ -108,14 +118,6 @@ const CASES = [
   ["3²", "none", [9, ""]],
   ["2³", "none", [8, ""]],
   ["(1+1)²", "none", [4, ""]],
-  ["2 000 000", "none", [2000000, ""]],
-  ["1 000,5", "none", [1000.5, ""]],
-  ["0,000 1", "none", [0.0001, ""]],
-  ["6,626 070 15·10⁻³⁴ J·s", "none", [6.62607015e-34, "kg·m²/s"]],
-  ["1,602 176 634·10^-19 C", "none", [1.602176634e-19, "C"]],
-  ["9,109 383 7e-31 kg", "none", [9.1093837e-31, "kg"]],
-  ["1 000,000 1", "none", [1000.0001, ""]],
-  ["2,5 3", "none", [7.5, ""]],
   ["2,000 kg", "none", [2, "kg"]],
   ["(2+3", "none", [5, ""]],
   ["2+3)", "none", [5, ""]],
@@ -343,13 +345,9 @@ const CASES = [
   ["10^3m", "none", [1000, "m"]],
   ["2,5·10^3 kg", "none", [2500, "kg"]],
   ["6,02·10^23 1/mol", "none", [6.02e+23, "1/mol"]],
-  ["384 400 km", "none", [384400000, "m"]],
-  ["299 792 458 m/s", "none", [299792458, "m/s"]],
-  ["1 000 kg", "none", [1000, "kg"]],
   ["6,02214076e+23 1/mol", "none", [6.02214076e+23, "1/mol"]],
   ["10973731,56816 1/m", "none", [10973731.5682, "1/m"]],
   ["5 1/s", "none", [5, "Hz"]],
-  ["2 1/2", "none", [1, ""]],
   ["2 1/(m*s)", "none", [2, "1/(m·s)"]],
   ["G*MZ/RZ^2", "none", [9.82030229339, "m/s²"]],
   ["sqrt(2*g*10 m)", "none", [14.0071410359, "m/s"]],
@@ -580,6 +578,8 @@ test('formatowanie liczb', () => {
   assert.equal(fmt(1234567).text, '1,234567e6');
   assert.equal(fmt(0.000123).text, '1,23e-4');
   assert.equal(fmt(2.5).text, '2,5');
+  assert.equal(fmt(123456.7).html, '123456,7');                   // bez dzielenia na tysiące – da się wpisać z powrotem
+  assert.equal(fmt(-12345).html, '−12345');
   assert.equal(fmt(5e-324).text, '4,940656458e-324');            // najmniejsza liczba – kiedyś „Infinity”
   assert.equal(fmt(Number.MAX_VALUE).text, '1,797693135e308');
   assert.equal(fmt(2.675, '3').text, '2,68');                      // połówki od zera jak w round()
