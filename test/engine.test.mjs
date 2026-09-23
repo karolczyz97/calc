@@ -232,7 +232,16 @@ const CASES = [
   ["1 mol", "none", [1, "mol"]],
   ["1 mmol", "none", [0.001, "mol"]],
   ["1 cd", "none", [1, "cd"]],
-  ["2 rad", "none", [2, ""]],
+  ["2 rad", "none", [114.591559026, ""]],                // kąt w radianach: w trybie DEG przeliczany na stopnie
+  ["2 rad", "rad", [2, ""]],
+  ["sin(1 rad)", "none", [0.841470984808, ""]],
+  ["sin(1 rad)", "rad", [0.841470984808, ""]],
+  ["5 mrad", "none", [0.286478897565, ""]],
+  ["1,5·10^-3 rad", "none", [0.0859436692696, ""]],
+  ["2 rad/s", "none", [2, "Hz"]],                        // prędkość kątowa zostaje bez przeliczania
+  ["sin(pi/6)", "none", [0.00913839539718, "", 1]],      // notka: π w trybie DEG
+  ["sin(pi/6)", "rad", [0.5, ""]],
+  ["sin(30)*pi", "none", [1.57079632679, ""]],
   ["2 sr", "none", [2, ""]],
   ["1 Gy", "none", [1, "m²/s²"]],
   ["1 mSv", "none", [0.001, "m²/s²"]],
@@ -509,6 +518,34 @@ test('stopnie w złożonych wyrażeniach', () => {
   }
   const x = evaluate('x = 30°');
   assert.ok(close(evaluate('sin(x)', { vars: { x: { v: x.v, u: x.u } } }).v, 0.5));
+  assert.deepEqual(evaluate('cos(2*pi*50 Hz*1 s)').notes, ['Tryb DEG: cos liczy w stopniach, a π sugeruje radiany – przełącz na RAD']);
+  assert.deepEqual(evaluate('cos(2*pi*50 Hz*1 s)', { angle: 'rad' }).notes, []);
+});
+
+// Druga linia wyniku: skąd się wzięła jednostka. Nawiasy muszą oddawać kolejność działań,
+// a krok, który tylko powtarza wynik, znika.
+test('ślad jednostek', () => {
+  const cases = [
+    ['100 km/2h', 'km / h = m/s'],
+    ['G*MZ/RZ^2', 'N·m²/kg² · kg / m² = m/s²'],
+    ['sqrt(2*g*10 m)', '√(m/s² · m) = m/s'],
+    ['(3 m/s)^2', '(m/s)² = m²/s²'],
+    ['(2 N*m)^2', '(N·m)² = kg²·m⁴/s⁴'],
+    ['(4 m^2)^0,5', '(m²)^0,5 = m'],
+    ['(2 m + 3 m)^2', '(m + m)² = m²'],
+    ['5 m - (2 m - 1 m)', 'm − (m − m) = m'],
+    ['10 N / (2 m/s^2)', 'N / (m/s²) = kg'],
+    ['10 J / (2 kg*m)', 'J / (kg·m) = m/s²'],
+    ['1/(2 s)', '1 / s = Hz'],
+    ['cbrt(27 m^3)', '∛(m³) = m'],
+    ['root(16 m^4; 4)', '∜(m⁴) = m'],
+    ['round(1,5 cm; 1)', 'round(cm) = m'],
+    ['min(2 m; 3 m)', 'min(m; m) = m'],
+    ['kB*300 K', 'J/K · K = kg·m²/s² = J'],
+    ['72 km/h * 2 h', 'km/h · h = m']
+  ];
+  for (const [src, want] of cases) assert.equal(evaluate(src).units?.text, want, src);
+  for (const src of ['5 kg*2', '2 kg * 3 m/s', '-5 m', '2 rad', '3!']) assert.equal(evaluate(src).units, null, src);
 });
 
 test('podpowiedź dokończenia działania', () => {

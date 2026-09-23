@@ -12,13 +12,16 @@ const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x);
 const oneOf = (v, list, d) => (list.includes(v) ? v : d);
 
 // Zapis z localStorage może być stary (zmienna jako sama liczba) albo uszkodzony – wtedy go pomijamy,
-// zamiast wyłożyć cały kalkulator
+// zamiast wyłożyć cały kalkulator. Jednostka to { kg: 1, m: 2 }, ślad jednostek – { text, tex }.
+const siUnit = (u) => (isObj(u) && Object.values(u).every(Number.isFinite) ? u : {});
+const unitTrace = (x) => (isObj(x) && typeof x.text === 'string' && typeof x.tex === 'string' ? x : null);
+
 function loadVars(raw) {
   const out = Object.create(null);          // bez prototypu: zmienna „constructor” to zwykła nazwa
   if (!isObj(raw)) return out;
   for (const [name, val] of Object.entries(raw)) {
     if (typeof val === 'number' && Number.isFinite(val)) out[name] = { v: val, u: {} };
-    else if (isObj(val) && Number.isFinite(val.v)) out[name] = { v: val.v, u: isObj(val.u) ? val.u : {} };
+    else if (isObj(val) && Number.isFinite(val.v)) out[name] = { v: val.v, u: siUnit(val.u) };
   }
   return out;
 }
@@ -26,7 +29,7 @@ function loadVars(raw) {
 function loadHist(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.filter((h) => isObj(h) && typeof h.e === 'string' && Number.isFinite(h.v))
-    .map((h) => ({ ...h, u: isObj(h.u) ? h.u : {} }))
+    .map((h) => ({ e: h.e, v: h.v, u: siUnit(h.u), units: unitTrace(h.units) }))
     .slice(0, HIST_MAX);
 }
 
@@ -57,7 +60,8 @@ export function mountCalculator(container, options = {}) {
   let vars = loadVars(store.get('vars', {}));
   let hist = loadHist(store.get('hist', []));
   let ans = hist.length ? { v: hist[0].v, u: hist[0].u } : { v: 0, u: {} };
-  let histPos = -1;
+  let histPos = -1;                 // który wpis historii jest w polu (↑ ↓); -1 = własne działanie
+  let draft = '';                   // własne działanie sprzed pierwszego ↑
   const closedRaw = store.get('closedGroups', GROUPS_CLOSED);
   let closed = new Set(Array.isArray(closedRaw) ? closedRaw : GROUPS_CLOSED);
 
@@ -66,7 +70,7 @@ export function mountCalculator(container, options = {}) {
   let palette = oneOf(store.get('palette', 'gemini'), ['gemini', 'system'], 'gemini');
   const MODE_ICON = { dark: '☾', light: '☀', auto: '◐' };
   const MODE_NAME = { dark: 'ciemny', light: 'jasny', auto: 'jak w systemie' };
-  const systemDark = typeof matchMedia !== 'undefined' ? matchMedia('(prefers-color-scheme: dark)') : { matches: true };
+  const systemDark = matchMedia('(prefers-color-scheme: dark)');
 
   container.classList.add('calc-root');
   if (isEmbedded) container.classList.add('is-embedded');
@@ -182,28 +186,27 @@ export function mountCalculator(container, options = {}) {
   const ghost = container.querySelector('#calc-ghost');
   const [ghostTyped, ghostRest] = ghost.children;
 
-  const fine = typeof matchMedia !== 'undefined' ? matchMedia('(pointer: fine)').matches : true;
+  const fine = matchMedia('(pointer: fine)').matches;
   let hintTimer = null;
 
   function flash(text, ms = 1200) {
     if (options.onFlash) { options.onFlash(text, ms); return; }
-    if (!hintEl) return;
     hintEl.textContent = text;
     hintEl.hidden = false;
     clearTimeout(hintTimer);
     hintTimer = setTimeout(() => { hintEl.hidden = true; }, ms);
   }
 
-  function renderKatex(el, tex, fallbackHtml) {
-    if (!el) return;
-    if (typeof window !== 'undefined' && window.katex && tex) {
-      try {
-        window.katex.render(tex, el, { throwOnError: false, displayMode: false });
-        return;
-      } catch (e) {}
+  // Ślad jednostek: wzór z KaTeX, a dopóki się nie wczyta (albo bez internetu) – zwykły tekst
+  function renderUnits(el, units) {
+    if (window.katex) {
+      try { window.katex.render(units.tex, el, { throwOnError: false }); return; } catch {}
     }
-    el.innerHTML = fallbackHtml !== undefined ? fallbackHtml : (tex || '');
+    el.textContent = units.text;
   }
+
+  // Liczba (albo ułamek) z jednostką wyniku: „20 m/s”
+  const withUnit = (html, u) => { const s = unitLabel(u); return s ? html + ' ' + esc(s) : html; };
 
   const calc = (raw) => evaluate(raw, { vars, ans, angle });
 
@@ -235,6 +238,15 @@ export function mountCalculator(container, options = {}) {
     if (expr.value === '' && /^[+×÷*/^!%]/.test(text) && hist.length) text = 'ans' + text;
     if (fine) expr.focus();
     setExpr(expr.value.slice(0, s) + text + expr.value.slice(e), s + text.length);
+  }
+
+  // Wartość (wynik, zmienna, stała) tuż obok innej wartości dostaje ×: inaczej „3” i wynik „60 m/s”
+  // skleiłyby się w 360 m/s, a „2” i stała Plancka h dałyby 2 godziny
+  function insertValue(text) {
+    const [s, e] = selection();
+    if (/[\p{L}\p{N}_)!%°]\s*$/u.test(expr.value.slice(0, s))) text = '×' + text;
+    if (/^\s*[\p{L}\p{N}_(√.,]/u.test(expr.value.slice(e))) text += '×';
+    insert(text);
   }
 
   function backspace() {
@@ -279,44 +291,37 @@ export function mountCalculator(container, options = {}) {
     try {
       const { assign, v, u, src: full, units, notes } = calc(src);
       const fr = toFraction(v);
-      const uStr = unitLabel(u);
-      const shown = full !== src ? esc(full) + ' ' : '';
-      let html = shown + (assign ? esc(assign) + ' ' : '') + '= ' + fmt(v, sig).html + (uStr ? ' ' + esc(uStr) : '') + (fr ? ' = ' + fracHtml(fr) + (uStr ? ' ' + esc(uStr) : '') : '');
+      let html = (full !== src ? esc(full) + ' ' : '') + (assign ? esc(assign) + ' ' : '') +
+        '= ' + withUnit(fmt(v, sig).html, u) + (fr ? ' = ' + withUnit(fracHtml(fr), u) : '');
       if (units) html += '<div class="preview-units"></div>';
       for (const note of notes) html += `<div class="preview-note">${esc(note)}</div>`;
       preview.innerHTML = html;
-      if (units) renderKatex(preview.querySelector('.preview-units'), units.tex, esc(units.text));
+      if (units) renderUnits(preview.querySelector('.preview-units'), units);
     } catch {
       preview.textContent = '';
     }
   }
 
-  function showResult(label, v, u = {}, units = null) {
+  // Wynik pod polem działania; rysowany od nowa po zmianie liczby cyfr i po wczytaniu KaTeX
+  let shown = hist.length ? { label: hist[0].e + ' =', v: hist[0].v, u: hist[0].u, units: hist[0].units } : null;
+
+  function showResult() {
+    if (!shown) return;
+    const { label, v, u, units } = shown;
     lastExpr.textContent = label;
     const f = fmt(v, sig);
     const uStr = unitLabel(u);
     result.innerHTML = f.html + (uStr ? `<span class="u">${esc(uStr)}</span>` : '');
     result.dataset.copy = copyText(v, u);
     result.dataset.insert = insertText(v, u);
-
-    if (unitTrack) {
-      if (units) {
-        renderKatex(unitTrack, units.tex, esc(units.text));
-      } else {
-        unitTrack.innerHTML = '';
-      }
-    }
+    if (units) renderUnits(unitTrack, units);
+    else unitTrack.textContent = '';
 
     const parts = [];
     const fr = toFraction(v);
-    if (fr) parts.push('ułamek: ' + fracHtml(fr) + (uStr ? ' ' + esc(uStr) : ''));
-    if (!(sig === 'auto' && f.text === exactText(v))) parts.push('dokładnie: ' + esc(exactText(v)) + (uStr ? ' ' + esc(uStr) : ''));
+    if (fr) parts.push('ułamek: ' + withUnit(fracHtml(fr), u));
+    if (!(sig === 'auto' && f.text === exactText(v))) parts.push('dokładnie: ' + withUnit(esc(exactText(v)), u));
     resultRaw.innerHTML = parts.join(' &nbsp;·&nbsp; ');
-  }
-
-  // Ostatni wynik z historii jeszcze raz (po zmianie liczby cyfr, po załadowaniu KaTeX, na starcie)
-  function showLast() {
-    if (hist.length) showResult(lastExpr.textContent || hist[0].e + ' =', hist[0].v, hist[0].u, hist[0].units);
   }
 
   function run() {
@@ -337,7 +342,8 @@ export function mountCalculator(container, options = {}) {
         hist = hist.slice(0, HIST_MAX);
         store.set('hist', hist);
       }
-      showResult(full + ' =', v, u, units);
+      shown = { label: full + ' =', v, u, units };
+      showResult();
       clearExpr();
       renderHist();
       const msgs = [...notes];
@@ -349,48 +355,35 @@ export function mountCalculator(container, options = {}) {
     }
   }
 
-  function row(cls, left, right, onLeft, onRight) {
-    const el = document.createElement('li');
-    el.className = cls;
-    const a = document.createElement('span');
-    a.className = 'e mono';
-    const b = document.createElement('span');
-    b.className = 'r mono';
-    if (typeof left === 'string') a.textContent = left; else a.innerHTML = left.html;
-    if (typeof right === 'string') b.textContent = right; else b.innerHTML = right.html;
-    if (onLeft) a.onclick = onLeft;
-    if (onRight) b.onclick = onRight;
-    el.append(a, b);
-    return el;
-  }
-
   function insertExpr(text) {
     const m = /^\s*[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03FF]*\s*=(.*)$/.exec(text);
     let t = m ? m[1].trim() : text;
     const simple = /^[A-Za-z0-9_,.\u0370-\u03FF]+$/.test(t);
     if (expr.value.trim() && !simple) t = '(' + t + ')';
-    insert(t);
+    insertValue(t);
   }
 
   function renderHist() {
     histEl.replaceChildren();
     histEmptyEl.hidden = hist.length > 0;
-    hist.forEach((h) => {
-      const uStr = unitLabel(h.u);
-      const resHtml = '= ' + fmt(h.v, sig).html + (uStr ? ' ' + esc(uStr) : '');
-      const li = row('', h.e, { html: resHtml },
-        () => insertExpr(h.e),
-        () => insert(insertText(h.v, h.u)));
-      li.firstChild.title = h.e + '  (kliknij, żeby wstawić)';
-      li.lastChild.title = 'Wstaw wynik w miejsce kursora';
+    for (const h of hist) {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="e mono"></span><span class="r mono"></span>';
+      const [e, r] = li.children;
+      e.textContent = h.e;
+      e.title = h.e + '  (kliknij, żeby wstawić)';
+      e.onclick = () => insertExpr(h.e);
+      r.innerHTML = '= ' + withUnit(fmt(h.v, sig).html, h.u);
+      r.title = 'Wstaw wynik w miejsce kursora';
+      r.onclick = () => insertValue(insertText(h.v, h.u));
       if (h.units) {
         const sub = document.createElement('div');
         sub.className = 'unit-sub mono';
-        renderKatex(sub, h.units.tex, esc(h.units.text));
-        li.firstChild.append(sub);
+        renderUnits(sub, h.units);
+        e.append(sub);
       }
       histEl.append(li);
-    });
+    }
   }
 
   function renderVars() {
@@ -399,7 +392,6 @@ export function mountCalculator(container, options = {}) {
     varsEl.replaceChildren();
     for (const n of names) {
       const { v: num, u } = vars[n];
-      const uStr = unitLabel(u);
       const li = document.createElement('li');
       const b = document.createElement('button');
       b.className = 'row';
@@ -407,9 +399,9 @@ export function mountCalculator(container, options = {}) {
       const shadow = n in CONST;
       b.innerHTML = `<div class="top"><span class="sym">${esc(n)}</span>` +
         `<span class="name${shadow ? ' shadowed' : ''}">${shadow ? 'przesłania stałą: ' + esc(CONST[n].name) : ''}</span></div>` +
-        `<div class="bottom"><span class="val mono">${fmt(num, sig).html}${uStr ? ' ' + esc(uStr) : ''}</span></div>`;
+        `<div class="bottom"><span class="val mono">${withUnit(fmt(num, sig).html, u)}</span></div>`;
       b.addEventListener('pointerdown', (e) => e.preventDefault());
-      b.onclick = () => insert(n);
+      b.onclick = () => insertValue(n);
       const x = document.createElement('button');
       x.className = 'x'; x.textContent = '×'; x.title = 'Usuń zmienną';
       x.addEventListener('pointerdown', (e) => e.preventDefault());
@@ -427,14 +419,13 @@ export function mountCalculator(container, options = {}) {
     b.innerHTML = `<div class="top"><span class="sym${up}">${c.sym}</span><span class="name">${esc(c.name)}</span></div>
       <div class="bottom"><span class="id mono">${esc(c.id)}</span><span class="val mono">${fmt(c.value, 'auto').html}${c.unit ? ' ' + esc(c.unit) : ''}</span></div>`;
     b.addEventListener('pointerdown', (e) => e.preventDefault());
-    b.onclick = () => insert(c.id);
+    b.onclick = () => insertValue(c.id);
     return b;
   }
 
   function renderConsts() {
     const q = norm(searchEl.value.trim());
-    const box = constsEl;
-    box.replaceChildren();
+    constsEl.replaceChildren();
 
     const groups = new Map();
     for (const [id] of CONSTS) {
@@ -443,7 +434,7 @@ export function mountCalculator(container, options = {}) {
       if (!groups.has(c.group)) groups.set(c.group, []);
       groups.get(c.group).push(c);
     }
-    if (!groups.size) { box.innerHTML = '<div class="empty">Nic nie znaleziono.</div>'; return; }
+    if (!groups.size) { constsEl.innerHTML = '<div class="empty">Nic nie znaleziono.</div>'; return; }
 
     for (const [name, list] of groups) {
       const open = !!q || !closed.has(name);
@@ -456,14 +447,14 @@ export function mountCalculator(container, options = {}) {
         store.set('closedGroups', [...closed]);
         renderConsts();
       };
-      box.append(head);
-      if (open) for (const c of list) box.append(constRow(c));
+      constsEl.append(head);
+      if (open) for (const c of list) constsEl.append(constRow(c));
     }
   }
 
   function renderModes() {
     for (const b of angleEl.querySelectorAll('button')) b.classList.toggle('on', b.dataset.m === angle);
-    for (const b of sigEl.querySelectorAll('button')) b.classList.toggle('on', b.dataset.s === String(sig));
+    for (const b of sigEl.querySelectorAll('button')) b.classList.toggle('on', b.dataset.s === sig);
   }
 
   function applyStandaloneTheme() {
@@ -471,14 +462,10 @@ export function mountCalculator(container, options = {}) {
     const dark = colorMode === 'auto' ? systemDark.matches : colorMode === 'dark';
     document.documentElement.setAttribute('data-mode', dark ? 'dark' : 'light');
     document.documentElement.setAttribute('data-palette', palette);
-    if (modeBtn) {
-      modeBtn.textContent = MODE_ICON[colorMode];
-      modeBtn.title = `Tryb: ${MODE_NAME[colorMode]} – kliknij: ciemny / jasny / systemowy (Ctrl+M)`;
-    }
-    if (paletteBtn) {
-      paletteBtn.textContent = palette === 'gemini' ? '✦' : '▣';
-      paletteBtn.title = `Kolory: ${palette === 'gemini' ? 'Gemini' : 'standardowe (systemowe)'} – kliknij, żeby zmienić (Ctrl+Shift+M)`;
-    }
+    modeBtn.textContent = MODE_ICON[colorMode];
+    modeBtn.title = `Tryb: ${MODE_NAME[colorMode]} – kliknij: ciemny / jasny / systemowy (Ctrl+M)`;
+    paletteBtn.textContent = palette === 'gemini' ? '✦' : '▣';
+    paletteBtn.title = `Kolory: ${palette === 'gemini' ? 'Gemini' : 'standardowe (systemowe)'} – kliknij, żeby zmienić (Ctrl+Shift+M)`;
   }
 
   function cycleMode() {
@@ -527,8 +514,9 @@ export function mountCalculator(container, options = {}) {
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       if (!hist.length) return;
       e.preventDefault();
+      if (histPos < 0) draft = expr.value;                 // ↓ na sam dół oddaje to, co było wpisane
       histPos = e.key === 'ArrowUp' ? Math.min(hist.length - 1, histPos + 1) : Math.max(-1, histPos - 1);
-      setExpr(histPos < 0 ? '' : hist[histPos].e);
+      setExpr(histPos < 0 ? draft : hist[histPos].e);
     }
   });
 
@@ -565,13 +553,13 @@ export function mountCalculator(container, options = {}) {
     livePreview();
     renderHist();
     renderVars();
-    showLast();
+    showResult();
   });
 
   if (!isEmbedded) {
     modeBtn.addEventListener('click', cycleMode);
     paletteBtn.addEventListener('click', togglePalette);
-    systemDark.addEventListener?.('change', () => { if (colorMode === 'auto') applyStandaloneTheme(); });
+    systemDark.addEventListener('change', () => { if (colorMode === 'auto') applyStandaloneTheme(); });
   }
 
   searchEl.addEventListener('input', renderConsts);
@@ -583,7 +571,7 @@ export function mountCalculator(container, options = {}) {
     if (!result.dataset.copy || resultClickTimer) return;
     resultClickTimer = setTimeout(() => {
       resultClickTimer = null;
-      insert(result.dataset.insert || result.dataset.copy);
+      insertValue(result.dataset.insert);
     }, 220);
   });
 
@@ -612,7 +600,7 @@ export function mountCalculator(container, options = {}) {
   // Re-renderowanie KaTeX po załadowaniu
   window.onKatexLoaded = () => {
     livePreview();
-    showLast();
+    showResult();
     renderHist();
   };
 
@@ -622,17 +610,13 @@ export function mountCalculator(container, options = {}) {
   renderHist();
   renderVars();
   renderConsts();
-  showLast();
+  showResult();
 
   return {
     focus() { expr.focus(); },
     run(expression) {
       if (expression) expr.value = expression;
       run();
-    },
-    setExpression(val) { setExpr(val); },
-    destroy() {
-      document.removeEventListener('keydown', onDocKeyDown);
     }
   };
 }
