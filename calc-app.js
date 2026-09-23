@@ -197,6 +197,7 @@ export function mountCalculator(container, options = {}) {
     clearTimeout(scrollTimers.get(el));
     scrollTimers.set(el, setTimeout(() => el.classList.remove('scrolling'), 1200));
   }, true);
+
   let hintTimer = null;
 
   function flash(text, ms = 1200) {

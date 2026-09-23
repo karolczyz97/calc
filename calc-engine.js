@@ -415,6 +415,7 @@ const FUNCS = dict({
   rad: [1, 1, (x) => x * Math.PI / 180],
   deg: [1, 1, (x) => x * 180 / Math.PI],
 });
+Object.assign(FUNCS, { asin: FUNCS.arcsin, acos: FUNCS.arccos, atan: FUNCS.arctg, arctan: FUNCS.arctg });   // nazwy angielskie, jak tan i cot
 
 // ================= Tokenizer =================
 // Liczba: cyfry, najwyżej jeden przecinek (albo kropka) dziesiętny i wykładnik: 9,81 · 3.14 · ,5 · 1,5e3.
@@ -461,7 +462,7 @@ function tokenize(src, vars, notes) {
       i += text.length;
       // Bez tych błędów „1.000.000”, „max(1,2,3)” i „1 000” dałyby po cichu 0, max(1,2·0,3) i 1·000 = 0
       if (/^[.,]\d/.test(src.slice(i))) throw err('Za dużo przecinków w liczbie – dużych liczb nie dziel (pisz 1000000 albo 1e6), argumenty oddzielaj średnikiem: max(1; 2; 3)');
-      if (['num', 'unit'].includes(t.at(-1)?.k)) throw err('Dwie liczby obok siebie – dużych liczb nie dziel spacją (pisz 1000000), a mnożenie zapisz jawnie: 2*3');
+      if (['num', 'unit'].includes(t.at(-1)?.k)) throw err('Dwie liczby obok siebie – wstaw znak działania (2*3, 1 h + 30 min), a dużych liczb nie dziel spacją: 1000000');
       const v = parseFloat(text.replace(',', '.'));
       const tok = { k: 'num', v, u: {}, rawU: '', text };
       const pc = powerCtx();

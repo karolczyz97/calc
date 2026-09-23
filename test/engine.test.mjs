@@ -11,7 +11,7 @@ const CTX = { none: {}, vars: { vars: VARS }, rad: { angle: 'rad' }, ans: { ans:
 const close = (a, b) => a === b || Math.abs(a - b) <= 1e-10 * Math.max(Math.abs(a), Math.abs(b));
 
 const COMMAS = 'Za dużo przecinków w liczbie – dużych liczb nie dziel (pisz 1000000 albo 1e6), argumenty oddzielaj średnikiem: max(1; 2; 3)';
-const TWO = 'Dwie liczby obok siebie – dużych liczb nie dziel spacją (pisz 1000000), a mnożenie zapisz jawnie: 2*3';
+const TWO = 'Dwie liczby obok siebie – wstaw znak działania (2*3, 1 h + 30 min), a dużych liczb nie dziel spacją: 1000000';
 
 // [wyrażenie, kontekst, oczekiwane]: [wartość w SI, jednostka, liczba notek (gdy są)] albo { err: komunikat }
 const CASES = [
@@ -51,6 +51,11 @@ const CASES = [
   ["arccos(0)", "none", [90, ""]],
   ["arctg(1)", "none", [45, ""]],
   ["arcctg(1)", "none", [45, ""]],
+  ["asin(0,5)", "none", [30, ""]],
+  ["acos(0)", "none", [90, ""]],
+  ["atan(1)", "none", [45, ""]],
+  ["arctan(1)", "rad", [0.785398163397, ""]],
+  ["asin(2)", "none", { err: "arcsin: argument musi być z przedziału [−1; 1]" }],
   ["sinh(1)", "none", [1.17520119364, ""]],
   ["tanh(1)", "none", [0.761594155956, ""]],
   ["tgh(1)", "none", [0.761594155956, ""]],
@@ -98,6 +103,8 @@ const CASES = [
   ["2 3", "none", { err: TWO }],
   ["2,5 3", "none", { err: TWO }],
   ["2 1/2", "none", { err: TWO }],
+  ["1 h 30 min", "none", { err: TWO }],
+  ["1 h + 30 min", "none", [5400, "s"]],
   ["6,62607015·10⁻³⁴ J·s", "none", [6.62607015e-34, "kg·m²/s"]],
   ["299792458 m/s", "none", [299792458, "m/s"]],
   ["384400 km", "none", [384400000, "m"]],
