@@ -503,7 +503,7 @@ function tokenize(src, vars, notes) {
   const unitToken = (i) => {
     const un = scanUnit(src, i, ctx);
     if (!un) return i;
-    t.push({ k: 'unit', v: un.f, u: un.u, rawU: un.raw });
+    t.push({ k: 'unit', v: un.f, u: un.u, rawU: un.raw, uf: un.f });
     return un.end;
   };
   const sciParens = [];                 // nawias otwarty zaraz po „10^”: 10^(-11) N
@@ -522,7 +522,7 @@ function tokenize(src, vars, notes) {
       if (pc === 'sci') { i = unitToken(i); continue; }
       if (pc === 'pow') continue;       // wykładnik to sama liczba: pi*r^2 h = π·r²·h
       const un = scanUnit(src, i, ctx);
-      if (un) { tok.v = v * un.f; tok.u = un.u; tok.rawU = un.raw; i = un.end; }
+      if (un) { tok.v = v * un.f; tok.u = un.u; tok.rawU = un.raw; tok.uf = un.f; i = un.end; }
       continue;
     }
     if (ch === ',') throw err('Przecinek to część dziesiętna – argumenty oddzielaj średnikiem ;');
@@ -607,7 +607,7 @@ function parse(tokens, vars) {
   function primary() {
     const tok = tokens[p++];
     if (!tok) throw err('Niedokończone wyrażenie');
-    if (tok.k === 'num' || tok.k === 'unit') return { t: 'num', v: tok.v, u: tok.u, rawU: tok.rawU };
+    if (tok.k === 'num' || tok.k === 'unit') return { t: 'num', v: tok.v, u: tok.u, rawU: tok.rawU, uf: tok.uf ?? 1 };
     if (tok.k === 'op' && tok.v === '(') { const n = additive(); closeParen(); return n; }
     if (tok.k === 'id') {
       if (has(FUNCS, tok.v) && !has(vars, tok.v)) {
@@ -655,11 +655,8 @@ function evaluateTree(n, vars, ans) {
       case 'num': return Q(node.v, node.u || {});
       case 'var': {
         const name = node.name;
-        if (has(vars, name)) {
-          const val = vars[name];
-          return (typeof val === 'object' && val !== null && 'v' in val) ? Q(val.v, val.u || {}) : Q(val, {});
-        }
-        if (name === 'ans') return (typeof ans === 'object' && ans !== null && 'v' in ans) ? Q(ans.v, ans.u || {}) : Q(ans, {});
+        if (has(vars, name)) return Q(vars[name].v, vars[name].u || {});
+        if (name === 'ans') return Q(ans.v, ans.u || {});
         if (has(CONST, name)) return Q(CONST[name].value, CONST[name].u);
         if (unitOf(name)) throw err(`„${name}” to jednostka – pisz ją zaraz za liczbą, np. 5 ${name}`);
         throw err(`Nieznana nazwa: ${name}`);
@@ -847,16 +844,19 @@ function plainNum(numStr) {
 export function fmt(x, sig = 'auto') {
   if (x === 0) return { html: '0', text: '0' };
   const digits = sig === 'auto' ? 10 : +sig;
-  let e = Math.floor(Math.log10(Math.abs(x)));
-  let m = +(x / 10 ** e).toPrecision(digits);
-  if (Math.abs(m) >= 10) { m /= 10; e += 1; m = +m.toPrecision(digits); }
+  // Połówki od zera jak w round(): 2,675 przy 3 cyfrach → 2,68, chociaż w zapisie binarnym to 2,67499…
+  const nx = Math.abs(x) < 1e308 ? x * (1 + Number.EPSILON) : x;   // przy samej górze zakresu byłoby Infinity
+  // Mantysa i wykładnik już po zaokrągleniu (9,9999999999e5 → 1e6); bez dzielenia przez 10^e,
+  // które dla bardzo małych liczb (< 1e-308) dawało „Infinity”
+  const [mText, eText] = nx.toExponential(digits - 1).split('e');
+  const e = +eText;
   if (e >= 6 || e <= -4) {
-    const ms = sig === 'auto' ? String(m) : m.toFixed(digits - 1);
+    const ms = sig === 'auto' ? String(+mText) : mText;
     return { html: `${plainNum(ms)} × 10<sup>${String(e).replace('-', '−')}</sup>`, text: `${ms.replace('.', ',')}e${e}` };
   }
   let str;
-  if (sig === 'auto') str = String(+x.toPrecision(12));
-  else str = e >= digits - 1 ? String(+x.toPrecision(digits)) : x.toPrecision(digits);
+  if (sig === 'auto') str = String(+nx.toPrecision(12));
+  else str = e >= digits - 1 ? String(+nx.toPrecision(digits)) : nx.toPrecision(digits);
   return { html: plainNum(str), text: str.replace('.', ',') };
 }
 
@@ -883,14 +883,40 @@ export const exactText = (x) => String(+x.toPrecision(15)).replace('.', ',');
 export const insertText = (v, u) => { const s = uInline(u); return exactText(v) + (s ? ' ' + s : ''); };
 export const copyText = (v, u) => { const s = unitLabel(u); return exactText(v) + (s ? ' ' + s : ''); };
 
+// ================= Notka o zaokrąglaniu =================
+// round, floor i ceil działają na wartości w SI: round(1,5 cm; 1) zaokrągla 0,015 m, a nie 1,5 cm
+const ROUNDING = new Set(['round', 'floor', 'ceil']);
+
+// Pierwsza jednostka przeliczana na SI w poddrzewie (cm, km/h, h) albo null
+function convertedUnit(node) {
+  if (node.t === 'num') return Math.abs(node.uf - 1) > 1e-12 ? node.rawU : null;
+  for (const child of [node.a, node.b, ...(node.args || [])]) {
+    const raw = child && convertedUnit(child);
+    if (raw) return raw;
+  }
+  return null;
+}
+
+function roundingNotes(node, vars, ans, notes) {
+  if (node.t === 'call' && ROUNDING.has(node.f) && node.args[0]) {
+    const raw = convertedUnit(node.args[0]);
+    const u = raw && evaluateTree(node.args[0], vars, ans).u;
+    if (raw && !uNone(u)) notes.add(`${node.f} zaokrągla w jednostkach SI (${unitLabel(u)}), nie w ${rawText(raw)}`);
+  }
+  for (const child of [node.a, node.b, ...(node.args || [])]) if (child) roundingNotes(child, vars, ans, notes);
+}
+
 // ================= Wejście silnika =================
-// evaluate('v = 72 km/h', { vars, ans, angle }) → { assign, v, u, src, units, notes }; błąd → CalcError
+// evaluate('v = 72 km/h', { vars, ans, angle }) → { assign, v, u, src, units, notes }; błąd → CalcError.
+// vars i ans: { v, u } – wartość w SI i jednostka
 export function evaluate(raw, { vars = {}, ans = { v: 0, u: {} }, angle = 'deg' } = {}) {
   angleMode = angle === 'rad' ? 'rad' : 'deg';
   const src = balance(raw);
   const notes = new Set();
-  const { assign, tree } = parse(tokenize(src, vars, notes), vars);
+  // µ z polskiej klawiatury (AltGr+M, znak mikro U+00B5) czytamy jak greckie μ: μ0, μB, μF
+  const { assign, tree } = parse(tokenize(src.replace(/µ/g, 'μ'), vars, notes), vars);
   const q = evaluateTree(tree, vars, ans);
+  roundingNotes(tree, vars, ans, notes);
   if (Number.isNaN(q.v)) throw err('Wynik nieokreślony');
   if (!Number.isFinite(q.v)) throw err('Wynik poza zakresem');
   return { assign, v: q.v, u: q.u, src, units: unitLine(tree, vars, ans), notes: [...notes] };

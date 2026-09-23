@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Kalkulator naukowy</title>
-<!-- KaTeX LaTeX math rendering -->
+<!-- KaTeX: ślad jednostek w drugiej linii wyniku -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous" onload="window.onKatexLoaded && window.onKatexLoaded()"></script>
-<link rel="stylesheet" href="https://karolczyz97.github.io/darkpdf/theme.css?v=1">
-<link rel="stylesheet" href="calc.css?v=7">
+<!-- Wspólna paleta Gemini z repo darkpdf (na GitHub Pages i w server.js leży obok: /darkpdf/) -->
+<link rel="stylesheet" href="../darkpdf/theme.css">
+<link rel="stylesheet" href="calc.css">
 <style>
   /* tło poza kalkulatorem (np. przy przewinięciu) w kolorze motywu */
   html { color-scheme: dark; background: Canvas; }
@@ -22,13 +23,11 @@
 <div id="calc-app"></div>
 
 <script type="module">
-  import { mountCalculator } from './calc-app.js?v=6';
+  import { mountCalculator } from './calc-app.js';
 
-  const appEl = document.getElementById('calc-app');
-  const calc = mountCalculator(appEl, { isEmbedded: false });
+  const calc = mountCalculator(document.getElementById('calc-app'), { isEmbedded: false });
 
-  const urlParams = new URLSearchParams(location.search);
-  const initialExpr = urlParams.get('expr');
+  const initialExpr = new URLSearchParams(location.search).get('expr');
   if (initialExpr) {
     calc.run(initialExpr);
   } else if (matchMedia('(pointer: fine)').matches) {

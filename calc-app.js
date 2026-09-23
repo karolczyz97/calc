@@ -1,9 +1,34 @@
 // calc-app.js – interfejs kalkulatora naukowego (samodzielna strona i panel w DarkPDF).
 // Obliczenia, jednostki i formatowanie liczb są w calc-engine.js.
 
-import { CalcError, CONSTS, CONST, evaluate, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js?v=2';
+import { CalcError, CONSTS, CONST, evaluate, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js';
 
-export { CalcError };
+const GROUPS_CLOSED = ['Mechanika', 'Elektryczność i magnetyzm', 'Termodynamika', 'Atom i kwanty', 'Astronomia', 'Układ Słoneczny', 'Przeliczniki', 'Matematyka'];
+const MODES = ['dark', 'light', 'auto'];
+const SIGS = ['auto', '2', '3', '4', '5'];
+const HIST_MAX = 100;
+
+const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x);
+const oneOf = (v, list, d) => (list.includes(v) ? v : d);
+
+// Zapis z localStorage może być stary (zmienna jako sama liczba) albo uszkodzony – wtedy go pomijamy,
+// zamiast wyłożyć cały kalkulator
+function loadVars(raw) {
+  const out = Object.create(null);          // bez prototypu: zmienna „constructor” to zwykła nazwa
+  if (!isObj(raw)) return out;
+  for (const [name, val] of Object.entries(raw)) {
+    if (typeof val === 'number' && Number.isFinite(val)) out[name] = { v: val, u: {} };
+    else if (isObj(val) && Number.isFinite(val.v)) out[name] = { v: val.v, u: isObj(val.u) ? val.u : {} };
+  }
+  return out;
+}
+
+function loadHist(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((h) => isObj(h) && typeof h.e === 'string' && Number.isFinite(h.v))
+    .map((h) => ({ ...h, u: isObj(h.u) ? h.u : {} }))
+    .slice(0, HIST_MAX);
+}
 
 function fracHtml(f) {
   const stack = (n, d) => `<span class="frac"><span>${n}</span><span>${d}</span></span>`;
@@ -27,18 +52,18 @@ export function mountCalculator(container, options = {}) {
     set(k, v) { try { localStorage.setItem('kalk:' + k, JSON.stringify(v)); } catch {} }
   };
 
-  let angle = store.get('angle', 'deg');
-  let sig = store.get('sig', 'auto');
-  let vars = Object.assign(Object.create(null), store.get('vars', {}));   // bez prototypu: zmienna „constructor” to zwykła nazwa
-  let hist = store.get('hist', []);
-  let ans = hist.length ? { v: hist[0].v, u: hist[0].u || {} } : { v: 0, u: {} };
+  let angle = oneOf(store.get('angle', 'deg'), ['deg', 'rad'], 'deg');
+  let sig = oneOf(String(store.get('sig', 'auto')), SIGS, 'auto');
+  let vars = loadVars(store.get('vars', {}));
+  let hist = loadHist(store.get('hist', []));
+  let ans = hist.length ? { v: hist[0].v, u: hist[0].u } : { v: 0, u: {} };
   let histPos = -1;
-  let closed = new Set(store.get('closedGroups', ['Mechanika', 'Elektryczność i magnetyzm', 'Termodynamika', 'Atom i kwanty', 'Astronomia', 'Układ Słoneczny', 'Przeliczniki', 'Matematyka']));
+  const closedRaw = store.get('closedGroups', GROUPS_CLOSED);
+  let closed = new Set(Array.isArray(closedRaw) ? closedRaw : GROUPS_CLOSED);
 
   // Motyw w trybie samodzielnym
-  let colorMode = store.get('colorMode', 'auto');
-  let palette = store.get('palette', 'gemini');
-  const MODES = ['dark', 'light', 'auto'];
+  let colorMode = oneOf(store.get('colorMode', 'auto'), MODES, 'auto');
+  let palette = oneOf(store.get('palette', 'gemini'), ['gemini', 'system'], 'gemini');
   const MODE_ICON = { dark: '☾', light: '☀', auto: '◐' };
   const MODE_NAME = { dark: 'ciemny', light: 'jasny', auto: 'jak w systemie' };
   const systemDark = typeof matchMedia !== 'undefined' ? matchMedia('(prefers-color-scheme: dark)') : { matches: true };
@@ -177,21 +202,44 @@ export function mountCalculator(container, options = {}) {
 
   const calc = (raw) => evaluate(raw, { vars, ans, angle });
 
+  // Miejsce kursora w polu działania. Gdy pole nie ma fokusu (dotyk: klawiatura ekranowa schowana),
+  // bierzemy ostatnie znane miejsce – i przyciski, i ⌫ działają wtedy w tym samym miejscu
   let lastSel = null;
   expr.addEventListener('blur', () => { lastSel = [expr.selectionStart, expr.selectionEnd]; });
 
-  function insert(text) {
-    const focused = document.activeElement === expr;
+  function selection() {
     const len = expr.value.length;
-    let [s, e] = focused ? [expr.selectionStart, expr.selectionEnd] : (lastSel || [len, len]);
-    s = Math.min(s, len); e = Math.min(e, len);
-    if (expr.value === '' && /^[+×÷*/^!%]/.test(text) && hist.length) text = 'ans' + text;
-    expr.value = expr.value.slice(0, s) + text + expr.value.slice(e);
-    const c = s + text.length;
-    if (fine) expr.focus();
-    expr.setSelectionRange(c, c);
-    lastSel = [c, c];
+    const [s, e] = document.activeElement === expr ? [expr.selectionStart, expr.selectionEnd] : (lastSel || [len, len]);
+    return [Math.min(s, len), Math.min(e, len)];
+  }
+
+  function setExpr(value, caret = value.length) {
+    expr.value = value;
+    expr.setSelectionRange(caret, caret);
+    lastSel = [caret, caret];
     livePreview();
+  }
+
+  function clearExpr() {
+    histPos = -1;
+    setExpr('');
+  }
+
+  function insert(text) {
+    const [s, e] = selection();
+    if (expr.value === '' && /^[+×÷*/^!%]/.test(text) && hist.length) text = 'ans' + text;
+    if (fine) expr.focus();
+    setExpr(expr.value.slice(0, s) + text + expr.value.slice(e), s + text.length);
+  }
+
+  function backspace() {
+    const [s, e] = selection();
+    if (s !== e) setExpr(expr.value.slice(0, s) + expr.value.slice(e), s);
+    else if (s > 0) {
+      const m = /[A-Za-z√]+\($|.$/u.exec(expr.value.slice(0, s));   // „sin(” znika w całości
+      const cut = m ? m[0].length : 1;
+      setExpr(expr.value.slice(0, s - cut) + expr.value.slice(s), s - cut);
+    }
   }
 
   function livePreview() {
@@ -204,18 +252,10 @@ export function mountCalculator(container, options = {}) {
       const uStr = unitLabel(u);
       const shown = full !== src ? esc(full) + ' ' : '';
       let html = shown + (assign ? esc(assign) + ' ' : '') + '= ' + fmt(v, sig).html + (uStr ? ' ' + esc(uStr) : '') + (fr ? ' = ' + fracHtml(fr) + (uStr ? ' ' + esc(uStr) : '') : '');
-      if (units) {
-        html += `<div class="preview-units" data-tex="${esc(units.tex)}">${esc(units.text)}</div>`;
-      }
+      if (units) html += '<div class="preview-units"></div>';
       for (const note of notes) html += `<div class="preview-note">${esc(note)}</div>`;
       preview.innerHTML = html;
-      const prevUnitsEl = preview.querySelector('.preview-units');
-      if (prevUnitsEl && window.katex) {
-        const tex = prevUnitsEl.getAttribute('data-tex');
-        if (tex) {
-          try { window.katex.render(tex, prevUnitsEl, { throwOnError: false, displayMode: false }); } catch {}
-        }
-      }
+      if (units) renderKatex(preview.querySelector('.preview-units'), units.tex, esc(units.text));
     } catch {
       preview.textContent = '';
     }
@@ -244,6 +284,11 @@ export function mountCalculator(container, options = {}) {
     resultRaw.innerHTML = parts.join(' &nbsp;·&nbsp; ');
   }
 
+  // Ostatni wynik z historii jeszcze raz (po zmianie liczby cyfr, po załadowaniu KaTeX, na starcie)
+  function showLast() {
+    if (hist.length) showResult(lastExpr.textContent || hist[0].e + ' =', hist[0].v, hist[0].u, hist[0].units);
+  }
+
   function run() {
     const src = expr.value.trim();
     if (!src) return;
@@ -255,14 +300,15 @@ export function mountCalculator(container, options = {}) {
         renderVars();
       }
       ans = { v, u };
-      hist.unshift({ e: full, v, u, units });
-      hist = hist.slice(0, 100);
-      store.set('hist', hist);
-      histPos = -1;
+      // To samo działanie drugi raz z rzędu (↑ i Enter, odświeżenie strony z ?expr=) nie dubluje historii
+      const repeated = hist[0] && hist[0].e === full && hist[0].v === v && unitLabel(hist[0].u) === unitLabel(u);
+      if (!repeated) {
+        hist.unshift({ e: full, v, u, units });
+        hist = hist.slice(0, HIST_MAX);
+        store.set('hist', hist);
+      }
       showResult(full + ' =', v, u, units);
-      expr.value = '';
-      lastSel = null;
-      preview.textContent = '';
+      clearExpr();
       renderHist();
       const msgs = [...notes];
       if (assign && assign in CONST) msgs.push(`${assign} przesłania teraz stałą „${CONST[assign].name}”`);
@@ -300,11 +346,11 @@ export function mountCalculator(container, options = {}) {
     histEl.replaceChildren();
     histEmptyEl.hidden = hist.length > 0;
     hist.forEach((h) => {
-      const uStr = h.u ? unitLabel(h.u) : '';
+      const uStr = unitLabel(h.u);
       const resHtml = '= ' + fmt(h.v, sig).html + (uStr ? ' ' + esc(uStr) : '');
       const li = row('', h.e, { html: resHtml },
         () => insertExpr(h.e),
-        () => insert(insertText(h.v, h.u || {})));
+        () => insert(insertText(h.v, h.u)));
       li.firstChild.title = h.e + '  (kliknij, żeby wstawić)';
       li.lastChild.title = 'Wstaw wynik w miejsce kursora';
       if (h.units) {
@@ -322,9 +368,7 @@ export function mountCalculator(container, options = {}) {
     varsBoxEl.hidden = names.length === 0;
     varsEl.replaceChildren();
     for (const n of names) {
-      const val = vars[n];
-      const num = (typeof val === 'object' && val !== null && 'v' in val) ? val.v : val;
-      const u = (typeof val === 'object' && val !== null && 'u' in val) ? val.u : {};
+      const { v: num, u } = vars[n];
       const uStr = unitLabel(u);
       const li = document.createElement('li');
       const b = document.createElement('button');
@@ -442,9 +486,7 @@ export function mountCalculator(container, options = {}) {
       run();
     } else if (e.key === 'Escape') {
       if (expr.value) {
-        expr.value = '';
-        histPos = -1;
-        livePreview();
+        clearExpr();
         e.preventDefault();
       } else if (options.onClose) {
         options.onClose();
@@ -454,8 +496,7 @@ export function mountCalculator(container, options = {}) {
       if (!hist.length) return;
       e.preventDefault();
       histPos = e.key === 'ArrowUp' ? Math.min(hist.length - 1, histPos + 1) : Math.max(-1, histPos - 1);
-      expr.value = histPos < 0 ? '' : hist[histPos].e;
-      livePreview();
+      setExpr(histPos < 0 ? '' : hist[histPos].e);
     }
   });
 
@@ -472,22 +513,8 @@ export function mountCalculator(container, options = {}) {
     }
     const a = b.dataset.a;
     if (a === 'run') run();
-    else if (a === 'clear') { expr.value = ''; livePreview(); }
-    else if (a === 'back') {
-      const focused = document.activeElement === expr;
-      const s = focused ? expr.selectionStart : expr.value.length;
-      const en = focused ? expr.selectionEnd : s;
-      if (s !== en) {
-        expr.value = expr.value.slice(0, s) + expr.value.slice(en);
-        expr.setSelectionRange(s, s);
-      } else if (s > 0) {
-        const m = /[A-Za-z√]+\($|.$/u.exec(expr.value.slice(0, s));
-        const cut = m ? m[0].length : 1;
-        expr.value = expr.value.slice(0, s - cut) + expr.value.slice(s);
-        expr.setSelectionRange(s - cut, s - cut);
-      }
-      livePreview();
-    }
+    else if (a === 'clear') clearExpr();
+    else if (a === 'back') backspace();
   });
 
   angleEl.addEventListener('click', (e) => {
@@ -506,7 +533,7 @@ export function mountCalculator(container, options = {}) {
     livePreview();
     renderHist();
     renderVars();
-    if (hist.length) showResult(lastExpr.textContent || hist[0].e + ' =', hist[0].v, hist[0].u, hist[0].units);
+    showLast();
   });
 
   if (!isEmbedded) {
@@ -533,7 +560,8 @@ export function mountCalculator(container, options = {}) {
     resultClickTimer = null;
     const t = result.dataset.copy;
     if (!t) return;
-    try { await navigator.clipboard.writeText(t); flash('Skopiowano: ' + t); } catch {}
+    try { await navigator.clipboard.writeText(t); flash('Skopiowano: ' + t); }
+    catch { flash('Nie udało się skopiować – schowek jest tu niedostępny'); }   // np. strona bez https
   });
 
   const onDocKeyDown = (e) => {
@@ -550,16 +578,11 @@ export function mountCalculator(container, options = {}) {
   document.addEventListener('keydown', onDocKeyDown);
 
   // Re-renderowanie KaTeX po załadowaniu
-  const onKatexReady = () => {
+  window.onKatexLoaded = () => {
     livePreview();
-    if (hist.length) {
-      showResult(lastExpr.textContent || (hist[0].e + ' ='), hist[0].v, hist[0].u, hist[0].units);
-      renderHist();
-    }
+    showLast();
+    renderHist();
   };
-  if (typeof window !== 'undefined') {
-    window.onKatexLoaded = onKatexReady;
-  }
 
   // Inicjalizacja widoku
   applyStandaloneTheme();
@@ -567,7 +590,7 @@ export function mountCalculator(container, options = {}) {
   renderHist();
   renderVars();
   renderConsts();
-  if (hist.length) showResult(hist[0].e + ' =', hist[0].v, hist[0].u, hist[0].units);
+  showLast();
 
   return {
     focus() { expr.focus(); },
@@ -575,10 +598,7 @@ export function mountCalculator(container, options = {}) {
       if (expression) expr.value = expression;
       run();
     },
-    setExpression(val) {
-      expr.value = val;
-      livePreview();
-    },
+    setExpression(val) { setExpr(val); },
     destroy() {
       document.removeEventListener('keydown', onDocKeyDown);
     }

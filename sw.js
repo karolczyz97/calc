@@ -1,9 +1,9 @@
 // Kalkulator – pamięć podręczna, dzięki której działa bez internetu.
-// Strona i motyw: najpierw z sieci, bez sieci – ostatnia zapisana wersja.
+// Strona i motyw: najpierw z sieci (zawsze świeże, bez ręcznych ?v=), bez sieci – ostatnia zapisana wersja.
 // KaTeX z CDN ma stały numer wersji, więc bierzemy go od razu z pamięci.
-const CACHE = 'calc-v8';
+const CACHE = 'calc-v9';
 const CORE = ['./', 'index.html', 'calc.css', 'calc-app.js', 'calc-engine.js',
-  'https://karolczyz97.github.io/darkpdf/theme.css?v=1'];   // ten sam adres co w index.html (to samo źródło na GitHub Pages)
+  '../darkpdf/theme.css'];   // wspólna paleta; na GitHub Pages to samo źródło co kalkulator
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
@@ -32,7 +32,9 @@ self.addEventListener('fetch', (e) => {
       return res;
     }
     try {
-      const res = await fetch(req);
+      // no-cache: przeglądarka pyta serwer, czy plik się zmienił (GitHub Pages trzyma pliki 10 min),
+      // więc po wdrożeniu od razu widać nową wersję wszystkich plików naraz
+      const res = await fetch(req, { cache: 'no-cache' });
       if (res.ok) cache.put(req, res.clone());
       return res;
     } catch (err) {

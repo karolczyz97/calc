@@ -274,6 +274,10 @@ const CASES = [
   ["2 MK", "none", [1.4684e+23, "kg"]],
   ["2 mu0", "none", [0.00000251327412424, "kg·m/(s²·A²)"]],
   ["2 μ0", "none", [0.00000251327412424, "kg·m/(s²·A²)"]],
+  ["2 µ0", "none", [0.00000251327412424, "kg·m/(s²·A²)"]],     // µ z klawiatury (znak mikro)
+  ["µB", "none", [9.2740100783e-24, "m²·A"]],
+  ["1 µm", "none", [0.000001, "m"]],
+  ["4,7 μF", "none", [0.0000047, "F"]],
   ["2 hbar", "none", [2.109143634e-34, "kg·m²/s"]],
   ["2 cl", "none", [4200, "m²/(s²·K)"]],
   ["2*T0", "none", [546.3, "K"]],
@@ -354,6 +358,11 @@ const CASES = [
   ["ceil(2,1 m)", "none", [3, "m"]],
   ["round(2,345 m; 2)", "none", [2.35, "m"]],
   ["round(2,345 m)", "none", [2, "m"]],
+  ["round(1,5 cm; 1)", "none", [0, "m", 1]],
+  ["round(2 h)", "none", [7200, "s", 1]],
+  ["floor(90 min)", "none", [5400, "s", 1]],
+  ["ceil(1,5 km/h)", "none", [1, "m/s", 1]],
+  ["round(2 km + 300 m)", "none", [2300, "m", 1]],
   ["round(2,5 m; 1 m)", "none", { err: "round: liczba miejsc nie może mieć jednostki" }],
   ["round(2; 0,5)", "none", { err: "round: liczba miejsc musi być liczbą całkowitą" }],
   ["sin(5 m)", "none", { err: "sin: argument nie może mieć jednostki (m)" }],
@@ -488,6 +497,8 @@ test('notki o odczytaniu zapisu', () => {
   assert.deepEqual(evaluate('10 m', { vars: VARS }).notes, ['„m” to tu jednostka, nie zmienna m (zmienna: 2*m)']);
   assert.deepEqual(evaluate('200 g').notes, ['„g” to przyspieszenie ziemskie, nie gram (masę wpisz w kg, np. 0,25 kg)']);
   assert.deepEqual(evaluate('72 km/h').notes, []);
+  assert.deepEqual(evaluate('round(1,5 cm; 1)').notes, ['round zaokrągla w jednostkach SI (m), nie w cm']);
+  assert.deepEqual(evaluate('round(2,345 m; 2)').notes, []);
 });
 
 test('stopnie w złożonych wyrażeniach', () => {
@@ -505,6 +516,13 @@ test('formatowanie liczb', () => {
   assert.equal(fmt(1234567).text, '1,234567e6');
   assert.equal(fmt(0.000123).text, '1,23e-4');
   assert.equal(fmt(2.5).text, '2,5');
+  assert.equal(fmt(5e-324).text, '4,940656458e-324');            // najmniejsza liczba – kiedyś „Infinity”
+  assert.equal(fmt(Number.MAX_VALUE).text, '1,797693135e308');
+  assert.equal(fmt(2.675, '3').text, '2,68');                      // połówki od zera jak w round()
+  assert.equal(fmt(-2.675, '3').text, '-2,68');
+  assert.equal(fmt(42550000, '3').text, '4,26e7');
+  assert.equal(fmt(999999.5, '3').text, '1,00e6');
+  assert.equal(fmt(-1234567).html, '−1,234567 × 10<sup>6</sup>');
   assert.equal(insertText(299792458, { m: 1, s: -1 }), '299792458 m/s');
   assert.equal(insertText(6.02214076e23, { mol: -1 }), '6,02214076e+23 1/mol');
   assert.equal(copyText(9.81, { m: 1, s: -2 }), '9,81 m/s²');
