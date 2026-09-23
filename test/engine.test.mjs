@@ -4,7 +4,7 @@
 // oczekiwań pod nowy wynik, dopóki nie sprawdzisz, że nowy wynik jest poprawny.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluate, unitLabel, insertText, copyText, CONST, CONSTS, CalcError, fmt } from '../calc-engine.js';
+import { evaluate, complete, unitLabel, insertText, copyText, CONST, CONSTS, CalcError, fmt } from '../calc-engine.js';
 
 const VARS = {m: {v: 2,u: {kg: 1}},s: {v: 100,u: {m: 1}},h: {v: 5,u: {m: 1}},t: {v: 10,u: {s: 1}},r: {v: 3,u: {m: 1}},T: {v: 300,u: {K: 1}},x1: {v: 7,u: {}},m2: {v: 3,u: {kg: 1}},V: {v: 2,u: {m: 3}}};
 const CTX = { none: {}, vars: { vars: VARS }, rad: { angle: 'rad' }, ans: { ans: { v: 2, u: { kg: 1 } } } };
@@ -509,6 +509,22 @@ test('stopnie w złożonych wyrażeniach', () => {
   }
   const x = evaluate('x = 30°');
   assert.ok(close(evaluate('sin(x)', { vars: { x: { v: x.v, u: x.u } } }).v, 0.5));
+});
+
+test('podpowiedź dokończenia działania', () => {
+  const cases = [
+    ['', ''], ['2+3', ''],
+    ['sq', 'rt('], ['sqrt', '('], ['sin(co', 's('], ['mi', 'n('], ['an', 's'],
+    ['2*rh', 'ow'], ['Ri', 'nf'], ['MZ', ''], ['R', ''], ['M', ''],        // pełna nazwa i pojedyncza litera: nic
+    ['sqrt(2*g*h', ')'], ['((1', '))'], ['sin(30', ')'], ['x = sqrt(2', ')'], ['sqrt(2*MZ', ')'],
+    ['sqrt(2*', ''], ['sqrt(', ''], ['2+3)', ''], ['log(8;', ''],               // jeszcze nie ma czego zamykać
+    ['10 km/mi', ''], ['5 k', ''], ['(2 m', ')'], ['x = 2h', ''],             // litery za liczbą to jednostka
+    ['sin 30 + co', 's(']
+  ];
+  for (const [src, want] of cases) assert.equal(complete(src), want, `„${src}”`);
+  assert.equal(complete('ve', { vel: { v: 1, u: {} } }), 'l');            // zmienne użytkownika najpierw
+  // podpowiedź wstawiona do działania daje poprawne wyrażenie
+  for (const src of ['sqrt(2*g*10 m', 'sin(30', '((1+2)*3']) assert.doesNotThrow(() => evaluate(src + complete(src)));
 });
 
 test('formatowanie liczb', () => {

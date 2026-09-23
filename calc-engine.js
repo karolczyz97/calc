@@ -827,6 +827,50 @@ export function balance(src) {
   return out + ')'.repeat(depth);
 }
 
+// ================= Podpowiedź dokończenia =================
+// Wyszarzony tekst za kursorem: reszta nazwy (funkcja z „(”, stała, zmienna, ans) albo brakujące nawiasy.
+// complete('sq') → 'rt(', complete('2*rh') → 'ow', complete('sqrt(2*g*h') → ')'; nic do podpowiedzenia → ''
+const NAME_AT_END = /[A-Za-z_Ͱ-Ͽ][A-Za-z0-9_Ͱ-Ͽ]*$/;
+const ENDS_WITH_OPERATOR = /[-+*/^(=;,×÷−–·⋅∙√]\s*$/;
+const MIN_PREFIX = 2;     // po jednej literze podpowiedzi byłoby za dużo (s → sin, sinh, sqrt, sigma…)
+
+// Kandydaci w kolejności podpowiadania: zmienne użytkownika, ans, funkcje, stałe (w kolejności z tablicy)
+function names(vars) {
+  const consts = [];
+  for (const [id, , , , , , aliases = []] of CONSTS) consts.push(id, ...aliases);
+  return [
+    ...Object.keys(vars).map((n) => [n, '']),
+    ['ans', ''],
+    ...Object.keys(FUNCS).filter((f) => f !== '√').map((f) => [f, '(']),
+    ...consts.map((n) => [n, ''])
+  ];
+}
+
+export function complete(src, vars = {}) {
+  if (!src.trim()) return '';
+  const word = NAME_AT_END.exec(src)?.[0];
+  if (word) {
+    // litery zaraz za liczbą to jednostka (10 km/mi…) – tam nazw nie podpowiadamy
+    const operand = src.slice(0, src.length - word.length).split(/[-+(=;,−–]/).pop();
+    if (!/^\s*[\d.,][\d\s.,]*[A-Za-zΩµμ]/.test(operand + word)) {
+      const all = names(vars);
+      const exact = all.find(([n]) => n === word);
+      if (exact?.[1]) return exact[1];                                  // sqrt → „(”
+      if (!exact && word.length >= MIN_PREFIX) {
+        const hit = all.find(([n]) => n.startsWith(word));
+        if (hit) return hit[0].slice(word.length) + hit[1];              // funkcja: bez zamykania, argument dopiero będzie
+      }
+    }
+  }
+  if (ENDS_WITH_OPERATOR.test(src)) return '';                          // „sqrt(2*” – jeszcze nie ma czego zamykać
+  let depth = 0;
+  for (const ch of src) {
+    if (ch === '(') depth++;
+    else if (ch === ')' && depth > 0) depth--;
+  }
+  return ')'.repeat(depth);
+}
+
 // ================= Formatowanie liczb =================
 const NNBSP = '\u202f';
 

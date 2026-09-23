@@ -1,7 +1,7 @@
 // calc-app.js – interfejs kalkulatora naukowego (samodzielna strona i panel w DarkPDF).
 // Obliczenia, jednostki i formatowanie liczb są w calc-engine.js.
 
-import { CalcError, CONSTS, CONST, evaluate, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js';
+import { CalcError, CONSTS, CONST, evaluate, complete, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js';
 
 const GROUPS_CLOSED = ['Mechanika', 'Elektryczność i magnetyzm', 'Termodynamika', 'Atom i kwanty', 'Astronomia', 'Układ Słoneczny', 'Przeliczniki', 'Matematyka'];
 const MODES = ['dark', 'light', 'auto'];
@@ -90,8 +90,11 @@ export function mountCalculator(container, options = {}) {
               <button data-s="auto">auto</button><button data-s="2">2</button><button data-s="3">3</button><button data-s="4">4</button><button data-s="5">5</button>
             </div>
           </div>
-          <input id="calc-expr" class="calc-expr mono" autocomplete="off" autocapitalize="off" spellcheck="false"
-                 placeholder="np. sqrt(2*g*h)  albo  v = 12">
+          <div class="calc-expr-wrap">
+            <input id="calc-expr" class="calc-expr mono" autocomplete="off" autocapitalize="off" spellcheck="false"
+                   placeholder="np. sqrt(2*g*h)  albo  v = 12">
+            <div id="calc-ghost" class="calc-ghost mono" aria-hidden="true" hidden><span class="typed"></span><span class="rest" title="Dokończ (Tab)"></span></div>
+          </div>
           <div id="calc-preview" class="calc-preview mono"></div>
           <div id="calc-last-expr" class="calc-last-expr mono"></div>
           <div id="calc-result" class="calc-result mono" title="Kliknij, żeby wstawić do działania · dwuklik kopiuje">0</div>
@@ -176,6 +179,8 @@ export function mountCalculator(container, options = {}) {
   const modeBtn = container.querySelector('#calc-mode-btn');
   const paletteBtn = container.querySelector('#calc-palette-btn');
   const hintEl = container.querySelector('#calc-hint');
+  const ghost = container.querySelector('#calc-ghost');
+  const [ghostTyped, ghostRest] = ghost.children;
 
   const fine = typeof matchMedia !== 'undefined' ? matchMedia('(pointer: fine)').matches : true;
   let hintTimer = null;
@@ -242,7 +247,32 @@ export function mountCalculator(container, options = {}) {
     }
   }
 
+  // Wyszarzona podpowiedź za kursorem: reszta nazwy (sq → sqrt() albo brakujące nawiasy.
+  // Tab, → na końcu pola albo kliknięcie w nią wstawia ją do działania.
+  let suggestion = '';
+
+  function updateGhost() {
+    const [s, e] = selection();
+    suggestion = s === e && e === expr.value.length ? complete(expr.value, vars) : '';
+    ghostTyped.textContent = expr.value;
+    ghostRest.textContent = suggestion;
+    ghost.hidden = !suggestion;
+    if (suggestion && ghost.scrollWidth > ghost.clientWidth) ghost.hidden = true;   // długie działanie: nie zmieściłaby się w polu
+  }
+
+  function acceptSuggestion() {
+    if (!suggestion || ghost.hidden) return false;
+    if (fine) expr.focus();
+    setExpr(expr.value + suggestion);
+    return true;
+  }
+
+  ghostRest.addEventListener('pointerdown', (e) => e.preventDefault());   // fokus zostaje w polu działania
+  ghostRest.addEventListener('click', acceptSuggestion);
+  for (const ev of ['keyup', 'click', 'focus', 'blur']) expr.addEventListener(ev, updateGhost);
+
   function livePreview() {
+    updateGhost();
     preview.classList.remove('err');
     const src = expr.value.trim();
     if (!src) { preview.textContent = ''; return; }
@@ -492,6 +522,8 @@ export function mountCalculator(container, options = {}) {
         options.onClose();
         e.preventDefault();
       }
+    } else if ((e.key === 'Tab' && !e.shiftKey) || (e.key === 'ArrowRight' && expr.selectionStart === expr.value.length)) {
+      if (acceptSuggestion()) e.preventDefault();          // bez podpowiedzi Tab i → działają jak zwykle
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       if (!hist.length) return;
       e.preventDefault();

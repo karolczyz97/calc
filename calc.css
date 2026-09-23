@@ -201,16 +201,50 @@ html.gemini .calc-root.is-embedded {
   color: var(--calc-text);
 }
 
-.calc-root .calc-expr {
-  width: 100%;
+.calc-root .calc-expr-wrap {
+  position: relative;
   margin-top: 10px;
+}
+
+/* Pole działania i wyszarzona podpowiedź nad nim muszą mieć identyczny tekst co do piksela */
+.calc-root .calc-expr,
+.calc-root .calc-ghost {
+  width: 100%;
   padding: 6px 0;
   font-size: 20px;
-  background: transparent;
-  color: var(--calc-text);
+  line-height: normal;
   border: 0;
   border-bottom: 1px solid var(--calc-line);
+}
+
+.calc-root .calc-expr {
+  background: transparent;
+  color: var(--calc-text);
   outline: none;
+}
+
+.calc-root .calc-ghost {
+  position: absolute;
+  inset: 0;
+  border-bottom-color: transparent;
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;                  /* klik w wpisany tekst trafia do pola */
+}
+
+.calc-root .calc-ghost[hidden] {
+  display: none;
+}
+
+.calc-root .calc-ghost .typed {
+  visibility: hidden;                    /* tylko zajmuje miejsce wpisanego tekstu */
+}
+
+.calc-root .calc-ghost .rest {
+  color: var(--calc-faint);
+  opacity: .7;
+  pointer-events: auto;                  /* klik w podpowiedź ją wstawia */
+  cursor: pointer;
 }
 
 .calc-root .calc-expr::placeholder {
