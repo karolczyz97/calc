@@ -3,15 +3,16 @@
 
 import { CalcError, CONSTS, CONST, evaluate, complete, stripAssign, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js';
 
-const GROUPS_CLOSED = ['Mechanika', 'Elektryczność i magnetyzm', 'Termodynamika', 'Atom i kwanty', 'Astronomia', 'Układ Słoneczny', 'Przeliczniki', 'Matematyka'];
+const GROUPS_CLOSED = [...new Set(CONSTS.map((c) => c[5]))].slice(1);   // na start otwarte tylko „Podstawowe”
 const MODES = ['dark', 'light', 'auto'];
 const SIGS = ['auto', '2', '3', '4', '5'];
 const HIST_MAX = 100;
+const OP_START = /^[+×÷*/^!%]/;   // działanie bez pierwszej liczby: +2 → ans+2
 
 const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x);
 const oneOf = (v, list, d) => (list.includes(v) ? v : d);
 
-// Zapis z localStorage może być stary (zmienna jako sama liczba) albo uszkodzony – wtedy go pomijamy,
+// Zapis z localStorage może być uszkodzony – wtedy go pomijamy,
 // zamiast wyłożyć cały kalkulator. Jednostka to { kg: 1, m: 2 }, ślad jednostek – { text, tex }.
 const siUnit = (u) => (isObj(u) && Object.values(u).every(Number.isFinite) ? u : {});
 const unitTrace = (x) => (isObj(x) && typeof x.text === 'string' && typeof x.tex === 'string' ? x : null);
@@ -20,8 +21,7 @@ function loadVars(raw) {
   const out = Object.create(null);          // bez prototypu: zmienna „constructor” to zwykła nazwa
   if (!isObj(raw)) return out;
   for (const [name, val] of Object.entries(raw)) {
-    if (typeof val === 'number' && Number.isFinite(val)) out[name] = { v: val, u: {} };
-    else if (isObj(val) && Number.isFinite(val.v)) out[name] = { v: val.v, u: siUnit(val.u) };
+    if (isObj(val) && Number.isFinite(val.v)) out[name] = { v: val.v, u: siUnit(val.u) };
   }
   return out;
 }
@@ -235,7 +235,7 @@ export function mountCalculator(container, options = {}) {
 
   function insert(text) {
     const [s, e] = selection();
-    if (expr.value === '' && /^[+×÷*/^!%]/.test(text) && hist.length) text = 'ans' + text;
+    if (expr.value === '' && OP_START.test(text) && hist.length) text = 'ans' + text;
     if (fine) expr.focus();
     setExpr(expr.value.slice(0, s) + text + expr.value.slice(e), s + text.length);
   }
@@ -399,11 +399,9 @@ export function mountCalculator(container, options = {}) {
       b.innerHTML = `<div class="top"><span class="sym">${esc(n)}</span>` +
         `<span class="name${shadow ? ' shadowed' : ''}">${shadow ? 'przesłania stałą: ' + esc(CONST[n].name) : ''}</span></div>` +
         `<div class="bottom"><span class="val mono">${withUnit(fmt(num, sig).html, u)}</span></div>`;
-      b.addEventListener('pointerdown', (e) => e.preventDefault());
       b.onclick = () => insertValue(n);
       const x = document.createElement('button');
       x.className = 'x'; x.textContent = '×'; x.title = 'Usuń zmienną';
-      x.addEventListener('pointerdown', (e) => e.preventDefault());
       x.onclick = () => { delete vars[n]; store.set('vars', vars); renderVars(); livePreview(); };
       li.append(b, x);
       varsEl.append(li);
@@ -417,7 +415,6 @@ export function mountCalculator(container, options = {}) {
     const up = /^(eV|au|ly|pc|kWh|cal|bar|atm|mmHg|km\/h|KM)$/.test(c.sym) ? ' up' : '';
     b.innerHTML = `<div class="top"><span class="sym${up}">${c.sym}</span><span class="name">${esc(c.name)}</span></div>
       <div class="bottom"><span class="id mono">${esc(c.id)}</span><span class="val mono">${fmt(c.value, 'auto').html}${c.unit ? ' ' + esc(c.unit) : ''}</span></div>`;
-    b.addEventListener('pointerdown', (e) => e.preventDefault());
     b.onclick = () => insertValue(c.id);
     return b;
   }
@@ -491,7 +488,7 @@ export function mountCalculator(container, options = {}) {
 
   // Zdarzenia kontrolek
   expr.addEventListener('input', () => {
-    if (/^[+×÷*/^!%]$/.test(expr.value) && hist.length) { expr.value = 'ans' + expr.value; }
+    if (expr.value.length === 1 && OP_START.test(expr.value) && hist.length) expr.value = 'ans' + expr.value;
     histPos = -1;
     livePreview();
   });
@@ -519,8 +516,9 @@ export function mountCalculator(container, options = {}) {
     }
   });
 
-  histEl.addEventListener('pointerdown', (e) => { if (e.target.closest('.e, .r')) e.preventDefault(); });
-  keysEl.addEventListener('pointerdown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+  for (const el of [keysEl, histEl, varsEl, constsEl]) {
+    el.addEventListener('pointerdown', (e) => { if (e.target.closest('button, .e, .r')) e.preventDefault(); });
+  }
   keysEl.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;

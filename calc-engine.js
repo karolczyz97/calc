@@ -37,14 +37,8 @@ const uPow = (u, n) => {
   return r;
 };
 
-const uNone = (u) => !u || Object.keys(u).length === 0;
-const uEq = (a, b) => {
-  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
-  for (const k of keys) {
-    if (Math.abs(((a && a[k]) || 0) - ((b && b[k]) || 0)) > 1e-9) return false;
-  }
-  return true;
-};
+const uNone = (u) => Object.keys(u).length === 0;
+const uEq = (a, b) => Object.keys({ ...a, ...b }).every((k) => Math.abs((a[k] || 0) - (b[k] || 0)) <= 1e-9);
 
 const DERIVED = dict({
   N: 'kg*m/s^2', J: 'N*m', W: 'J/s', Pa: 'N/m^2', C: 'A*s', V: 'W/A',
@@ -65,7 +59,7 @@ const EXTRA = dict({
 
 const PREFIX = dict({
   Y: 1e24, Z: 1e21, E: 1e18, P: 1e15, T: 1e12, G: 1e9, M: 1e6, k: 1e3, h: 1e2, da: 10,
-  d: 1e-1, c: 1e-2, m: 1e-3, µ: 1e-6, μ: 1e-6, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15, a: 1e-18   // u = µ z klawiatury (4,7 uF)
+  d: 1e-1, c: 1e-2, m: 1e-3, μ: 1e-6, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15, a: 1e-18   // u = µ z klawiatury (4,7 uF)
 });
 
 // Symbol bez przedrostka (m, kg, N, h, eV…) → { u, f } albo null
@@ -111,7 +105,7 @@ function parseUnit(str) {
 const WS = /\s/;
 const skipWs = (s, j) => { while (j < s.length && WS.test(s[j])) j++; return j; };
 const UNIT_OPS = '*·⋅∙/';
-const SYM_RE = /^[A-Za-zΩµμ]+/;
+const SYM_RE = /^[A-Za-zΩμ]+/;
 const ID_START = /[A-Za-z_\u0370-\u03FF]/;
 const ID_RE = /^[A-Za-z_\u0370-\u03FF][A-Za-z0-9_\u0370-\u03BF\u03C1-\u03FF]*/;
 const EXP_RE = /^\^(?:\(([+-]?\d+(?:[.,]\d+)?)\)|([+-]?\d+(?:[.,]\d+)?))/;   // ^2, ^-1, ^(-2), ^0,5
@@ -162,15 +156,12 @@ function unitGroup(src, j, ctx, notes) {
   const inner = [];                                     // notki z nieudanej próby przepadają
   const g = unitChain(src, skipWs(src, j + 1), ctx, inner);
   if (!g) return null;
-  let k = skipWs(src, g.end);
-  if (src[k] !== ')') return null;
-  k++;
-  let e = 1;
-  const x = readExp(src, k);
-  if (x) { e = x.e; k += x.len; }
+  const k = skipWs(src, g.end) + 1;
+  if (src[k - 1] !== ')') return null;
+  const { e, len } = readExp(src, k) ?? { e: 1, len: 0 };
   notes.push(...inner);
   const pow = (list) => list.map((t) => ({ sym: t.sym, e: t.e * e }));
-  return { u: uPow(g.u, e), f: Math.pow(g.f, e), num: pow(g.num), den: pow(g.den), end: k };
+  return { u: uPow(g.u, e), f: Math.pow(g.f, e), num: pow(g.num), den: pow(g.den), end: k + len };
 }
 
 // Ciąg składników połączonych * · / (albo zaczynający się od „1/”). Operator, za którym nie stoi
@@ -216,7 +207,7 @@ function scanUnit(src, i, ctx) {
 }
 
 function uSplit(u, part) {
-  const keys = Object.keys(u || {}).filter((k) => Math.abs(u[k]) > 1e-9).sort((a, b) => BASE.indexOf(a) - BASE.indexOf(b));
+  const keys = Object.keys(u).filter((k) => Math.abs(u[k]) > 1e-9).sort((a, b) => BASE.indexOf(a) - BASE.indexOf(b));
   return {
     top: keys.filter((k) => u[k] > 0).map((k) => part(k, u[k])),
     bot: keys.filter((k) => u[k] < 0).map((k) => part(k, -u[k]))
@@ -255,28 +246,15 @@ function rawToTex(raw) {
 // Zapis jednostki w śladzie obliczeń: m^2 → m², s^-1 → s⁻¹, m^0.5 → m^0,5
 const rawText = (raw) => raw.replace(/\^(-?\d+)(?![\d.])/g, (_, e) => supNum(e)).replace(/\^(-?\d+)\.(\d+)/g, '^$1,$2');
 
-const NAMED_PAIRS = [
-  ['N', 'kg*m/s^2'], ['J', 'kg*m^2/s^2'], ['W', 'kg*m^2/s^3'], ['Pa', 'kg/(m*s^2)'],
-  ['C', 'A*s'], ['V', 'kg*m^2/(s^3*A)'], ['Ω', 'kg*m^2/(s^3*A^2)'], ['F', 's^4*A^2/(kg*m^2)'],
-  ['T', 'kg/(s^2*A)'], ['Wb', 'kg*m^2/(s^2*A)'], ['H', 'kg*m^2/(s^2*A^2)'], ['S', 's^3*A^2/(kg*m^2)'],
-  ['Hz', '1/s']
-].map(([n, d]) => [n, parseUnit(d).u]);
+// Jednostki z nazwą, którą pokazujemy przy wyniku zamiast rozwinięcia w SI (1/s → Hz; Bq, Gy, Sv – nie)
+const NAMED_PAIRS = ['N', 'J', 'W', 'Pa', 'C', 'V', 'Ω', 'F', 'T', 'Wb', 'H', 'S', 'Hz'].map((n) => [n, plainUnit(n).u]);
 
-const uName = (u) => {
-  if (!u || uNone(u)) return null;
-  const match = NAMED_PAIRS.find(([, d]) => uEq(d, u));
-  return match ? match[0] : null;
-};
+const uName = (u) => (uNone(u) ? null : NAMED_PAIRS.find(([, d]) => uEq(d, u))?.[0] ?? null);
 
 export const unitLabel = (u) => uName(u) || uText(u);   // to, co widać przy wyniku: N, m/s², 1/mol
 
 // Jednostka do wstawienia w pole działania – zawsze da się ją odczytać z powrotem (m^3/(kg*s^2), 1/mol)
-const uInline = (u) => {
-  if (!u || uNone(u)) return '';
-  const name = uName(u);
-  if (name) return name;
-  return uText(u).replace(SUP_ANY, (s) => '^' + supToNum(s)).replace(/·/g, '*');
-};
+const uInline = (u) => uName(u) || uText(u).replace(SUP_ANY, (s) => '^' + supToNum(s)).replace(/·/g, '*');
 
 // ================= Stałe =================
 export const CONSTS = [
@@ -437,7 +415,6 @@ const FUNCS = dict({
   rad: [1, 1, (x) => x * Math.PI / 180],
   deg: [1, 1, (x) => x * 180 / Math.PI],
 });
-FUNCS['√'] = FUNCS.sqrt;
 
 // ================= Tokenizer =================
 // Liczba: cyfry, najwyżej jeden przecinek (albo kropka) dziesiętny i wykładnik: 9,81 · 3.14 · ,5 · 1,5e3.
@@ -450,11 +427,11 @@ function tokenize(src, vars, notes) {
   const ctx = { vars, notes };
   const known = (n) => n === 'ans' || has(FUNCS, n) || has(CONST, n) || has(vars, n);
   const t = [];
-  const isOp = (tok, v) => tok && tok.k === 'op' && tok.v === v;
-  const isTen = (tok) => tok && tok.k === 'num' && tok.text === '10' && uNone(tok.u);
+  const isOp = (tok, v) => tok?.k === 'op' && tok.v === v;
+  const isTen = (tok) => tok?.k === 'num' && tok.text === '10' && uNone(tok.u);
   // Liczba jest wykładnikiem potęgi: 'sci' gdy podstawą jest 10, 'pow' dla innej podstawy
   const powerCtx = () => {
-    const [a, b, c] = [t[t.length - 1], t[t.length - 2], t[t.length - 3]];
+    const [a, b, c] = [t.at(-1), t.at(-2), t.at(-3)];
     if (isOp(a, '^')) return isTen(b) ? 'sci' : 'pow';
     if ((isOp(a, '-') || isOp(a, '+')) && isOp(b, '^')) return isTen(c) ? 'sci' : 'pow';
     return null;
@@ -497,7 +474,7 @@ function tokenize(src, vars, notes) {
     const sup = SUP_RUN.exec(rest);     // x², 10⁻¹¹
     if (sup) {
       const e = supToNum(sup[0]);
-      const sci = isTen(t[t.length - 1]);
+      const sci = isTen(t.at(-1));
       t.push({ k: 'op', v: '^' });
       if (e < 0) t.push({ k: 'op', v: '-' });
       t.push({ k: 'num', v: Math.abs(e), u: {}, rawU: '', text: String(Math.abs(e)) });
@@ -516,7 +493,7 @@ function tokenize(src, vars, notes) {
     }
     const op = OP_MAP[ch] || ch;
     if (OPS.includes(op)) {
-      if (op === '(') sciParens.push(isOp(t[t.length - 1], '^') && isTen(t[t.length - 2]));
+      if (op === '(') sciParens.push(isOp(t.at(-1), '^') && isTen(t.at(-2)));
       t.push({ k: 'op', v: op });
       i++;
       if (op === ')' && sciParens.pop()) i = readUnit(i);
@@ -530,7 +507,6 @@ function tokenize(src, vars, notes) {
 // ================= Parser =================
 function parse(tokens, vars) {
   let p = 0;
-  const peek = () => tokens[p];
   const isOpAt = (i, v) => tokens[i]?.k === 'op' && tokens[i].v === v;
   const isOp = (v) => isOpAt(p, v);
   const startsValue = (t) => t && (t.k === 'num' || t.k === 'unit' || t.k === 'id' || (t.k === 'op' && (t.v === '(' || t.v === '√')));
@@ -544,7 +520,7 @@ function parse(tokens, vars) {
     let n = unary();
     for (;;) {
       if (isOp('*') || isOp('/')) { const o = tokens[p++].v; n = { t: 'bin', o, a: n, b: unary() }; }
-      else if (startsValue(peek())) n = { t: 'bin', o: '*', a: n, b: unary() };
+      else if (startsValue(tokens[p])) n = { t: 'bin', o: '*', a: n, b: unary() };
       else return n;
     }
   }
@@ -570,8 +546,8 @@ function parse(tokens, vars) {
     }
   }
   function closeParen() {
-    if (isOp(')')) { p++; return; }
-    if (p < tokens.length) throw err('Brakuje nawiasu )');
+    if (!isOp(')')) throw err('Brakuje nawiasu )');
+    p++;
   }
   function primary() {
     const tok = tokens[p++];
@@ -608,7 +584,6 @@ function parse(tokens, vars) {
     const v = tokens[p].v;
     if (v === '=') throw err('Przypisanie tylko na początku: nazwa = wyrażenie');
     if (v === ',') throw err('Średnik ; tylko między argumentami funkcji w nawiasie, np. root(8; 3). Ułamek dziesiętny pisz z przecinkiem: 9,81');
-    if (v === ')') throw err('Nadmiarowy nawias )');
     throw err(`Nieoczekiwany znak: ${v}`);
   }
   return { assign, tree };
@@ -621,7 +596,7 @@ const U_KEEP = new Set(['abs', 'floor', 'ceil', 'min', 'max']);
 function evaluateTree(n, vars, ans) {
   function evq(node) {
     switch (node.t) {
-      case 'num': return Q(node.v, node.u || {});
+      case 'num': return Q(node.v, node.u);
       case 'var': {
         const name = node.name;
         if (has(vars, name)) return Q(vars[name].v, vars[name].u || {});
@@ -649,11 +624,8 @@ function evaluateTree(n, vars, ans) {
         const a = evq(node.a), b = evq(node.b);
         switch (node.o) {
           case '+': case '-': {
-            if (!uEq(a.u, b.u)) {
-              const utA = uText(a.u) || 'bezwymiarowa';
-              const utB = uText(b.u) || 'bezwymiarowa';
-              throw err(`Nie można ${node.o === '+' ? 'dodać' : 'odjąć'} wielkości o różnych jednostkach: ${utA} i ${utB}`);
-            }
+            const name = (u) => uText(u) || 'bezwymiarowa';
+            if (!uEq(a.u, b.u)) throw err(`Nie można ${node.o === '+' ? 'dodać' : 'odjąć'} wielkości o różnych jednostkach: ${name(a.u)} i ${name(b.u)}`);
             return Q(node.o === '+' ? a.v + b.v : a.v - b.v, a.u);
           }
           case '*': return Q(a.v * b.v, uMul(a.u, b.u, 1));
@@ -801,7 +773,7 @@ const MIN_PREFIX = 2;     // po jednej literze podpowiedzi byłoby za dużo (s �
 // Kandydaci w kolejności podpowiadania: zmienne użytkownika, ans, funkcje, stałe (w kolejności z tablicy)
 const BUILTIN_NAMES = [
   ['ans', ''],
-  ...Object.keys(FUNCS).filter((f) => f !== '√').map((f) => [f, '(']),
+  ...Object.keys(FUNCS).map((f) => [f, '(']),
   ...CONSTS.flatMap(([id, , , , , , aliases = []]) => [id, ...aliases]).map((n) => [n, ''])
 ];
 const names = (vars) => [...Object.keys(vars).map((n) => [n, '']), ...BUILTIN_NAMES];
@@ -869,8 +841,9 @@ export function toFraction(x, maxDen = 1000) {
 
 export const exactText = (x) => String(+x.toPrecision(15)).replace('.', ',');
 // Wynik do wstawienia w pole działania i do schowka – oba da się wkleić z powrotem
-export const insertText = (v, u) => { const s = uInline(u); return exactText(v) + (s ? ' ' + s : ''); };
-export const copyText = (v, u) => { const s = unitLabel(u); return exactText(v) + (s ? ' ' + s : ''); };
+const withUnit = (v, s) => exactText(v) + (s ? ' ' + s : '');
+export const insertText = (v, u) => withUnit(v, uInline(u));
+export const copyText = (v, u) => withUnit(v, unitLabel(u));
 
 // ================= Notki o prawdopodobnych pomyłkach =================
 // round, floor i ceil działają na wartości w SI: round(1,5 cm; 1) zaokrągla 0,015 m, a nie 1,5 cm.
