@@ -426,14 +426,14 @@ const CASES = [
   ["h = 10 m", "vars", [10, "m", 1]],
   ["20 m/s", "vars", [20, "m/s", 2]],
   ["5 s", "vars", [5, "s", 1]],
-  ["3m", "vars", [6, "kg", 1]],
+  ["3m", "vars", [3, "m", 1]],                          // litery za liczbą to jednostka, także sklejone
   ["3 m", "vars", [3, "m", 1]],
   ["3*m", "vars", [6, "kg"]],
   ["m*g", "vars", [19.62, "N"]],
-  ["10m", "vars", [20, "kg", 1]],
+  ["10m", "vars", [10, "m", 1]],
   ["2 h", "vars", [7200, "s", 1]],
-  ["2h", "vars", [10, "m", 1]],
-  ["sqrt(2h/g)", "vars", [1.00963755469, "s", 1]],
+  ["2h", "vars", [7200, "s", 1]],
+  ["sqrt(2h/g)", "vars", [27.0914184591, "s^1,5/m^0,5", 1]],   // 2 godziny / g – zmienną h mnoży się jawnie
   ["sqrt(2*h/g)", "vars", [1.00963755469, "s"]],
   ["pi*2^2 h", "vars", [62.8318530718, "m"]],
   ["pi*r^2 h", "vars", [141.371669412, "m³"]],
@@ -444,8 +444,8 @@ const CASES = [
   ["100 km/t", "vars", [100, "m/kg", 1]],
   ["5 T", "vars", [5, "T", 1]],
   ["2 x1", "vars", [14, ""]],
-  ["2 m2", "vars", [6, "kg", 1]],
-  ["5 m2", "vars", [15, "kg", 1]],
+  ["2 m2", "vars", [2, "m²", 1]],
+  ["5 m2", "vars", [5, "m²", 1]],
   ["x1 = 2", "vars", [2, ""]],
   ["5 kg/(m*s)", "vars", [5, "kg/(m·s)", 2]],
   ["m = 5 kg", "vars", [5, "kg"]],
@@ -454,7 +454,8 @@ const CASES = [
   ["m*v^2/2", "vars", { err: "Nieznana nazwa: v" }],
   ["g = 10", "vars", [10, ""]],
   ["2 V", "vars", [2, "V", 1]],
-  ["2V", "vars", [4, "m³", 1]],
+  ["2V", "vars", [2, "V", 1]],
+  ["2 m1", "vars", { err: "Nieznana nazwa: m1" }],          // m1, v1, t1 to nazwy zmiennych, nie m¹
   ["10 m/s*t", "vars", [10000, "kg·m/s", 3]],
   ["sin(pi/2)", "rad", [1, ""]],
   ["sin(90)", "rad", [0.893996663601, ""]],
@@ -511,7 +512,8 @@ test('tabela stałych jest kompletna', () => {
 });
 
 test('notki o odczytaniu zapisu', () => {
-  assert.deepEqual(evaluate('3m', { vars: VARS }).notes, ['„m” to tu zmienna m, nie jednostka (jednostka: liczba, spacja, m)']);
+  assert.deepEqual(evaluate('3m', { vars: VARS }).notes, ['„m” to tu jednostka, nie zmienna m (zmienna: 2*m)']);
+  assert.deepEqual(evaluate('2 m2', { vars: VARS }).notes, ['„m2” to tu jednostka, nie zmienna m2 (zmienna: 2*m2)']);
   assert.deepEqual(evaluate('10 m', { vars: VARS }).notes, ['„m” to tu jednostka, nie zmienna m (zmienna: 2*m)']);
   assert.deepEqual(evaluate('200 g').notes, ['„g” to przyspieszenie ziemskie, nie gram (masę wpisz w kg, np. 0,25 kg)']);
   assert.deepEqual(evaluate('72 km/h').notes, []);

@@ -128,55 +128,39 @@ function readExp(src, j) {
 
 const NOTE_G = '„g” to przyspieszenie ziemskie, nie gram (masę wpisz w kg, np. 0,25 kg)';
 
-// Czy symbol w miejscu jednostki jest jednak nazwą (stałą, zmienną, funkcją)? Tylko dla tekstu użytkownika.
-// Zasada: po liczbie litery to jednostka („10 m”, „20 m/s”), także gdy istnieje zmienna o tej nazwie –
-// wyjątek: pierwszy symbol sklejony z liczbą („3m”, „2h/g”) jest zmienną. Każda kolizja daje notkę.
-function isNameHere(src, j, sym, word, first, glued, ctx, notes) {
-  const { vars } = ctx;
-  if (word !== sym) {                                   // nazwa z cyframi lub _: T0, mu0, v1, m_e
-    const known = word === 'ans' || has(vars, word) || has(CONST, word) || has(FUNCS, word);
-    if (!known) return false;
-    const d = word.slice(sym.length);
-    if (has(vars, word) && /^[1-9]$/.test(d) && unitOf(sym)) notes.push(`„${word}” to tu zmienna, nie jednostka ${sym}${supNum(d)} (jednostka: ${sym}^${d})`);
-    return true;
-  }
-  if (sym === 'ans') return true;
-  if (sym === 'g') {                                    // samo g = przyspieszenie ziemskie (mg, kg działają)
-    if (first && !has(vars, 'g')) notes.push(NOTE_G);
-    return true;
-  }
-  if (has(FUNCS, sym) && src[j + sym.length] === '(') return true;   // min( = funkcja, 60 min = minuty
-  if (has(CONST, sym) && !plainUnit(sym)) return true;             // MS, MK, hbar, cl – stała, nie jednostka z przedrostkiem
-  if (has(vars, sym) && unitOf(sym)) {
-    if (first && glued) {
-      notes.push(`„${sym}” to tu zmienna ${sym}, nie jednostka (jednostka: liczba, spacja, ${sym})`);
-      return true;
-    }
-    notes.push(`„${sym}” to tu jednostka, nie zmienna ${sym} (zmienna: 2*${sym})`);
-  }
-  return false;
-}
-
-// Jeden składnik: symbol z wykładnikiem (m, km, s², m^-1, mm2 = mm²) albo nawias „(kg·K)”
-function unitTerm(src, j, ctx, first, glued, notes) {
-  if (src[j] === '(') return first ? null : unitGroup(src, j, ctx, notes);
-  const m = SYM_RE.exec(src.slice(j));
-  if (!m) return null;
-  const sym = m[0];
-  const word = ID_RE.exec(src.slice(j))?.[0] ?? sym;
-  if (ctx && isNameHere(src, j, sym, word, first, glued, ctx, notes)) return null;
-  const part = unitOf(sym);
+// Jeden składnik jednostki: symbol z wykładnikiem (m, km, s², m^-1, mm2 = mm²) albo nawias „(kg·K)”.
+// Zasada: litery za liczbą to jednostka (10 m, 72 km/h, 3m); zmienne i stałe mnoży się jawnie: 3*m, 2*MS.
+// W tekście użytkownika (ctx) słowo jest jednak nazwą – pierwsza pasująca reguła wygrywa:
+//  1. nie ma postaci jednostki: T0, m1, m_e (jednostka to całe słowo, najwyżej z wykładnikiem 2–9: m2, cm3)
+//  2. g – przyspieszenie ziemskie, nie gram (mg i kg to jednostki)
+//  3. funkcja z nawiasem: min(2; 3), a 60 min to minuty
+//  4. stała, która byłaby jednostką tylko z przedrostkiem: MS to masa Słońca, nie megasimens (też MK, cl, hbar)
+// Zmienna o nazwie jednostki przegrywa z jednostką i dostaje notkę, jak ją zapisać.
+function unitTerm(src, j, ctx, first, notes) {
+  if (src[j] === '(') return first ? null : unitGroup(src, j, ctx, notes);   // „5 (kg)” to zwykłe mnożenie
+  const sym = SYM_RE.exec(src.slice(j))?.[0];
+  const part = sym && unitOf(sym);
   if (!part) return null;
-  let k = j + sym.length, e = 1;
-  const x = readExp(src, k);
-  if (x) { e = x.e; k += x.len; }
-  else if (word.length === sym.length + 1 && /[1-9]/.test(word[sym.length])) { e = +word[sym.length]; k++; }   // m2, s2, mm2
-  return { u: uPow(part.u, e), f: Math.pow(part.f, e), num: [{ sym, e }], den: [], end: k };
+  const word = ID_RE.exec(src.slice(j))?.[0] ?? sym;
+  const digitExp = word.length === sym.length + 1 && /[2-9]/.test(word[sym.length]);
+  if (word !== sym && !digitExp) return null;                                // 1.
+  if (ctx) {
+    const { vars } = ctx;
+    if (sym === 'g') {                                                        // 2.
+      if (first && !has(vars, 'g')) notes.push(NOTE_G);
+      return null;
+    }
+    if (has(FUNCS, sym) && src[j + sym.length] === '(') return null;         // 3.
+    if (has(CONST, sym) && !plainUnit(sym)) return null;                      // 4.
+    if (has(vars, word)) notes.push(`„${word}” to tu jednostka, nie zmienna ${word} (zmienna: 2*${word})`);
+  }
+  const x = readExp(src, j + sym.length) ?? { e: digitExp ? +word[sym.length] : 1, len: digitExp ? 1 : 0 };
+  return { u: uPow(part.u, x.e), f: Math.pow(part.f, x.e), num: [{ sym, e: x.e }], den: [], end: j + sym.length + x.len };
 }
 
 function unitGroup(src, j, ctx, notes) {
   const inner = [];                                     // notki z nieudanej próby przepadają
-  const g = unitChain(src, skipWs(src, j + 1), ctx, false, inner);
+  const g = unitChain(src, skipWs(src, j + 1), ctx, inner);
   if (!g) return null;
   let k = skipWs(src, g.end);
   if (src[k] !== ')') return null;
@@ -191,14 +175,13 @@ function unitGroup(src, j, ctx, notes) {
 
 // Ciąg składników połączonych * · / (albo zaczynający się od „1/”). Operator, za którym nie stoi
 // jednostka, zostaje w wyrażeniu: „100 N / g” to 100 N podzielone przez g.
-function unitChain(src, j, ctx, glued, notes) {
+function unitChain(src, j, ctx, notes) {
   const acc = { u: {}, f: 1, num: [], den: [], end: j };
   let op = '*', n = 0;
   const one = /^1\s*\/\s*/.exec(src.slice(j));          // „1/mol”, „1/(m·s)”
   if (one) { op = '/'; j += one[0].length; }
   for (;;) {
-    const lead = n === 0 && !one;
-    const t = unitTerm(src, j, ctx, lead, glued && lead, notes);
+    const t = unitTerm(src, j, ctx, n === 0 && !one, notes);
     if (!t) break;
     const div = op === '/';
     acc.u = uMul(acc.u, t.u, div ? -1 : 1);
@@ -226,9 +209,8 @@ function rawOf(num, den) {
 // Jednostka od pozycji i → { u, f, raw, end } albo null.
 // ctx = null: napisy z tabel; ctx = { vars, notes }: tekst użytkownika (nazwy, zmienne, notki).
 function scanUnit(src, i, ctx) {
-  const start = skipWs(src, i);
   const notes = [];
-  const r = unitChain(src, start, ctx, start === i, notes);
+  const r = unitChain(src, skipWs(src, i), ctx, notes);
   if (ctx) for (const n of notes) ctx.notes.add(n);
   return r ? { u: r.u, f: r.f, raw: rawOf(r.num, r.den), end: r.end } : null;
 }
@@ -471,21 +453,24 @@ function tokenize(src, vars, notes) {
   const t = [];
   const isOp = (tok, v) => tok && tok.k === 'op' && tok.v === v;
   const isTen = (tok) => tok && tok.k === 'num' && tok.text === '10' && uNone(tok.u);
-  // Wykładnik potęgi: 'sci' gdy podstawą jest 10 (6,67·10^-11 N·m²/kg²), 'pow' dla innej podstawy
+  // Liczba jest wykładnikiem potęgi: 'sci' gdy podstawą jest 10, 'pow' dla innej podstawy
   const powerCtx = () => {
     const [a, b, c] = [t[t.length - 1], t[t.length - 2], t[t.length - 3]];
     if (isOp(a, '^')) return isTen(b) ? 'sci' : 'pow';
     if ((isOp(a, '-') || isOp(a, '+')) && isOp(b, '^')) return isTen(c) ? 'sci' : 'pow';
     return null;
   };
-  // Kąt w radianach (2 rad, 5 mrad) działa jak ° w drugą stronę: w trybie DEG przelicza się na stopnie
-  const radOp = (raw) => { if (/^[^·/^]*rad$/.test(raw)) t.push({ k: 'op', v: 'rad' }); };
-  // Jednostka za zapisem naukowym dotyczy całej liczby: (6,67·10⁻¹¹)·N·m²/kg²
-  const unitToken = (i) => {
+  // Jednostka za liczbą (co jest jednostką, a co nazwą – unitTerm):
+  //  - za zwykłą liczbą należy do niej, więc 100 km/2h to 100 km / (2 h)
+  //  - za wykładnikiem przy 10 (6,67·10^-11 N, 10⁻¹¹ N, 10^(-11) N) dotyczy całej liczby: (6,67·10⁻¹¹)·N
+  //  - za wykładnikiem przy innej podstawie jej nie ma: pi*r^2 h to π·r²·h
+  //  - rad (2 rad, 5 mrad) działa jak ° w drugą stronę: w trybie DEG przelicza radiany na stopnie
+  const readUnit = (i, num = null) => {
     const un = scanUnit(src, i, ctx);
     if (!un) return i;
-    t.push({ k: 'unit', v: un.f, u: un.u, rawU: un.raw, uf: un.f });
-    radOp(un.raw);
+    if (num) Object.assign(num, { v: num.v * un.f, u: un.u, rawU: un.raw, uf: un.f });
+    else t.push({ k: 'unit', v: un.f, u: un.u, rawU: un.raw, uf: un.f });
+    if (/^[^·/^]*rad$/.test(un.raw)) t.push({ k: 'op', v: 'rad' });
     return un.end;
   };
   const sciParens = [];                 // nawias otwarty zaraz po „10^”: 10^(-11) N
@@ -504,14 +489,7 @@ function tokenize(src, vars, notes) {
       const tok = { k: 'num', v, u: {}, rawU: '', text };
       const pc = powerCtx();
       t.push(tok);
-      if (pc === 'sci') { i = unitToken(i); continue; }
-      if (pc === 'pow') continue;       // wykładnik to sama liczba: pi*r^2 h = π·r²·h
-      const un = scanUnit(src, i, ctx);
-      if (un) {
-        Object.assign(tok, { v: v * un.f, u: un.u, rawU: un.raw, uf: un.f });
-        i = un.end;
-        radOp(un.raw);
-      }
+      if (pc !== 'pow') i = readUnit(i, pc === 'sci' ? null : tok);
       continue;
     }
     if (ch === ',') throw err('Przecinek to część dziesiętna – argumenty oddzielaj średnikiem ;');
@@ -524,7 +502,7 @@ function tokenize(src, vars, notes) {
       if (e < 0) t.push({ k: 'op', v: '-' });
       t.push({ k: 'num', v: Math.abs(e), u: {}, rawU: '', text: String(Math.abs(e)) });
       i += sup[0].length;
-      if (sci) i = unitToken(i);
+      if (sci) i = readUnit(i);
       continue;
     }
     if (ch === 'π' || ch === 'ħ') { t.push({ k: 'id', v: ch }); i++; continue; }
@@ -541,7 +519,7 @@ function tokenize(src, vars, notes) {
       if (op === '(') sciParens.push(isOp(t[t.length - 1], '^') && isTen(t[t.length - 2]));
       t.push({ k: 'op', v: op });
       i++;
-      if (op === ')' && sciParens.pop()) i = unitToken(i);
+      if (op === ')' && sciParens.pop()) i = readUnit(i);
       continue;
     }
     throw err(`Nieznany znak: ${ch}`);
