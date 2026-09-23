@@ -64,7 +64,12 @@ html.gemini .calc-root.is-embedded {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  scrollbar-color: var(--calc-key) transparent;
+  scrollbar-color: transparent transparent;   /* suwak widać tylko przy przewijaniu – jak pasek postępu w DarkPDF */
+}
+
+.calc-root.scrolling,
+.calc-root .scrolling {
+  scrollbar-color: var(--calc-key-hi) transparent;
 }
 
 .calc-root * {
@@ -75,19 +80,6 @@ html.gemini .calc-root.is-embedded {
   background: transparent !important;
   min-height: auto;
   height: 100%;
-}
-
-.calc-root ::-webkit-scrollbar { width: 9px; height: 9px; }
-.calc-root ::-webkit-scrollbar-track { background: transparent; }
-.calc-root ::-webkit-scrollbar-thumb {
-  background: var(--calc-key);
-  border-radius: 5px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-.calc-root ::-webkit-scrollbar-thumb:hover {
-  background: var(--calc-key-hi);
-  background-clip: content-box;
 }
 
 .calc-root .mono {

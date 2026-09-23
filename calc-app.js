@@ -187,6 +187,16 @@ export function mountCalculator(container, options = {}) {
   const [ghostTyped, ghostRest] = ghost.children;
 
   const fine = matchMedia('(pointer: fine)').matches;
+
+  // Suwak pokazuje się przy przewijaniu i znika 1,2 s po nim (calc.css: .scrolling). Przewijanie nie
+  // wędruje w górę drzewa, więc łapiemy je w fazie capture – działa dla całego panelu i listy stałych.
+  const scrollTimers = new WeakMap();
+  container.addEventListener('scroll', (e) => {
+    const el = e.target;
+    el.classList.add('scrolling');
+    clearTimeout(scrollTimers.get(el));
+    scrollTimers.set(el, setTimeout(() => el.classList.remove('scrolling'), 1200));
+  }, true);
   let hintTimer = null;
 
   function flash(text, ms = 1200) {
