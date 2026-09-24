@@ -374,6 +374,28 @@ html.gemini .calc-root.is-embedded {
   padding: 8px 12px;
 }
 
+/* Osadzony w DarkPDF: krawędzie pól (wyświetlacz, klawisze, listy) 8 px od brzegu panelu, jak w panelu Gemini */
+.calc-root.is-embedded .calc-main {
+  padding: 8px;
+  gap: 8px;
+}
+
+/* Bez tego lista stałych (wiersze bez zawijania) wymuszałaby ~330 px i wypychała treść poza wąski panel */
+.calc-root.is-embedded .calc-main > * {
+  min-width: 0;
+}
+
+.calc-root.is-embedded .display,
+.calc-root.is-embedded .keys {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.calc-root.is-embedded .calc-search {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 .calc-root .keys button {
   padding: 11px 0;
   border-radius: 6px;
