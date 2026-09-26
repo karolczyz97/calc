@@ -281,6 +281,7 @@ html.gemini .calc-root.is-embedded {
 }
 
 .calc-root .calc-result {
+  color: var(--calc-muted);              /* duży i długo stoi w miejscu – przygaszony jak podgląd i „dokładnie:”, mniej męczy OLED */
   font-size: 34px;
   line-height: 1.2;
   overflow-wrap: anywhere;
