@@ -382,10 +382,10 @@ export function mountCalculator(container, options = {}) {
       const [e, r] = li.children;
       e.textContent = h.e;
       e.title = h.e + '  (kliknij, żeby wstawić)';
-      e.onclick = () => insertExpr(h.e);
+      e.onclick = (ev) => { ev?.stopPropagation?.(); insertExpr(h.e); };
       r.innerHTML = '= ' + withUnit(fmt(h.v, sig).html, h.u);
       r.title = 'Wstaw wynik w miejsce kursora';
-      r.onclick = () => insertValue(insertText(h.v, h.u));
+      r.onclick = (ev) => { ev?.stopPropagation?.(); insertValue(insertText(h.v, h.u)); };
       if (h.units) {
         const sub = document.createElement('div');
         sub.className = 'unit-sub mono';
@@ -410,10 +410,10 @@ export function mountCalculator(container, options = {}) {
       b.innerHTML = `<div class="top"><span class="sym">${esc(n)}</span>` +
         `<span class="name${shadow ? ' shadowed' : ''}">${shadow ? 'przesłania stałą: ' + esc(CONST[n].name) : ''}</span></div>` +
         `<div class="bottom"><span class="val mono">${withUnit(fmt(num, sig).html, u)}</span></div>`;
-      b.onclick = () => insertValue(n);
+      b.onclick = (ev) => { ev?.stopPropagation?.(); insertValue(n); };
       const x = document.createElement('button');
       x.className = 'x'; x.textContent = '×'; x.title = 'Usuń zmienną';
-      x.onclick = () => { delete vars[n]; store.set('vars', vars); renderVars(); livePreview(); };
+      x.onclick = (ev) => { ev?.stopPropagation?.(); delete vars[n]; store.set('vars', vars); renderVars(); livePreview(); };
       li.append(b, x);
       varsEl.append(li);
     }
@@ -426,7 +426,7 @@ export function mountCalculator(container, options = {}) {
     const up = /^(eV|au|ly|pc|kWh|cal|bar|atm|mmHg|km\/h|KM)$/.test(c.sym) ? ' up' : '';
     b.innerHTML = `<div class="top"><span class="sym${up}">${c.sym}</span><span class="name">${esc(c.name)}</span></div>
       <div class="bottom"><span class="id mono">${esc(c.id)}</span><span class="val mono">${fmt(c.value, 'auto').html}${c.unit ? ' ' + esc(c.unit) : ''}</span></div>`;
-    b.onclick = () => insertValue(c.id);
+    b.onclick = (ev) => { ev?.stopPropagation?.(); insertValue(c.id); };
     return b;
   }
 
@@ -574,8 +574,8 @@ export function mountCalculator(container, options = {}) {
   }
 
   searchEl.addEventListener('input', renderConsts);
-  clearHistBtn.addEventListener('click', () => { hist = []; store.set('hist', hist); renderHist(); });
-  clearVarsBtn.addEventListener('click', () => { vars = Object.create(null); store.set('vars', vars); renderVars(); livePreview(); });
+  clearHistBtn.addEventListener('click', (e) => { e.stopPropagation(); hist = []; store.set('hist', hist); renderHist(); });
+  clearVarsBtn.addEventListener('click', (e) => { e.stopPropagation(); vars = Object.create(null); store.set('vars', vars); renderVars(); livePreview(); });
 
   let resultClickTimer = null;
   result.addEventListener('click', () => {
