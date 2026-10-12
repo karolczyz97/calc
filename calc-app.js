@@ -448,7 +448,8 @@ export function mountCalculator(container, options = {}) {
       const head = document.createElement('button');
       head.className = 'group' + (open ? ' open' : '');
       head.innerHTML = `<span class="caret">${open ? '▾' : '▸'}</span><span>${esc(name)}</span><span class="count">${list.length}</span>`;
-      head.onclick = () => {
+      head.onclick = (e) => {
+        e?.stopPropagation?.();
         if (q) return;
         closed.has(name) ? closed.delete(name) : closed.add(name);
         store.set('closedGroups', [...closed]);
@@ -568,6 +569,8 @@ export function mountCalculator(container, options = {}) {
     modeBtn.addEventListener('click', cycleMode);
     paletteBtn.addEventListener('click', togglePalette);
     systemDark.addEventListener('change', () => { if (colorMode === 'auto') applyStandaloneTheme(); });
+  } else {
+    container.addEventListener('click', (e) => e.stopPropagation());
   }
 
   searchEl.addEventListener('input', renderConsts);
