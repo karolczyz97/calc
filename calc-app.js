@@ -470,6 +470,7 @@ export function mountCalculator(container, options = {}) {
     const dark = colorMode === 'auto' ? systemDark.matches : colorMode === 'dark';
     document.documentElement.setAttribute('data-mode', dark ? 'dark' : 'light');
     document.documentElement.setAttribute('data-palette', palette);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#131314' : '#ffffff');
     modeBtn.textContent = MODE_ICON[colorMode];
     modeBtn.title = `Tryb: ${MODE_NAME[colorMode]} – kliknij: ciemny / jasny / systemowy (Ctrl+M)`;
     paletteBtn.textContent = palette === 'gemini' ? '✦' : '▣';
