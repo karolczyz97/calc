@@ -15,6 +15,7 @@
   --calc-key: color-mix(in srgb, CanvasText 9%, Canvas);
   --calc-key-fn: color-mix(in srgb, CanvasText 5%, Canvas);
   --calc-key-hi: color-mix(in srgb, CanvasText 17%, Canvas);
+  --calc-field: var(--calc-key-fn);
   --calc-eq-bg: color-mix(in srgb, AccentColor 28%, Canvas);
   --calc-eq-text: CanvasText;
   --calc-eq-line: color-mix(in srgb, AccentColor 55%, Canvas);
@@ -38,6 +39,7 @@ html.gemini .calc-root.is-embedded {
   --calc-key: var(--gem-hover, #282a2c);
   --calc-key-hi: var(--gem-hover-2, #3c4043);
   --calc-key-fn: var(--gem-fill-2, #1f2022);
+  --calc-field: var(--gem-menu, #1f1f1f);
   --calc-text: var(--gem-text, #e3e3e3);
   --calc-muted: var(--gem-text-muted, #c4c7c5);
   --calc-faint: var(--gem-text-dim, #9a9b9c);
@@ -92,6 +94,12 @@ html.gemini .calc-root.is-embedded {
   background: none;
   border: 0;
   cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+
+.calc-root button:focus-visible {
+  outline: 2px solid var(--calc-eq-text);
+  outline-offset: -2px;
 }
 
 /* ---- Układ siatki (main) ---- */
@@ -126,7 +134,7 @@ html.gemini .calc-root.is-embedded {
 
 .calc-root .panel {
   background: var(--calc-panel);
-  border-radius: 8px;
+  border-radius: var(--gem-radius-menu, 20px);
   box-shadow: var(--calc-shadow);
 }
 
@@ -152,6 +160,7 @@ html.gemini .calc-root.is-embedded {
   gap: 8px;
   color: var(--calc-faint);
   font-size: 12px;
+  flex-wrap: wrap;
 }
 
 .calc-root .seg {
@@ -160,8 +169,8 @@ html.gemini .calc-root.is-embedded {
 }
 
 .calc-root .seg button {
-  padding: 2px 7px;
-  border-radius: 4px;
+  padding: 4px 8px;
+  border-radius: 14px;
   color: var(--calc-faint);
 }
 
@@ -182,12 +191,17 @@ html.gemini .calc-root.is-embedded {
 }
 
 .calc-root .bar .icon {
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 6px;
+  border-radius: 50%;
   color: var(--calc-faint);
   font-size: 15px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+
+.calc-root .ui-icon { width: 18px; height: 18px; flex: none; }
 
 .calc-root .bar .icon:hover {
   background: var(--calc-key-hi);
@@ -203,23 +217,27 @@ html.gemini .calc-root.is-embedded {
 .calc-root .calc-expr,
 .calc-root .calc-ghost {
   width: 100%;
-  padding: 6px 0;
+  padding: 12px 16px;
   font-size: 20px;
-  line-height: normal;
+  line-height: 28px;
   border: 0;
-  border-bottom: 1px solid var(--calc-line);
+  border-radius: var(--gem-radius-field, 24px);
 }
 
 .calc-root .calc-expr {
-  background: transparent;
+  background: var(--calc-field);
   color: var(--calc-text);
   outline: none;
+  transition: background .12s ease, box-shadow .12s ease;
+}
+
+.calc-root .calc-expr:focus {
+  box-shadow: inset 0 0 0 1px var(--calc-eq-text);
 }
 
 .calc-root .calc-ghost {
   position: absolute;
   inset: 0;
-  border-bottom-color: transparent;
   white-space: pre;
   overflow: hidden;
   pointer-events: none;                  /* klik w wpisany tekst trafia do pola */
@@ -282,11 +300,13 @@ html.gemini .calc-root.is-embedded {
 
 .calc-root .calc-result {
   color: var(--calc-muted);              /* duży i długo stoi w miejscu – przygaszony jak podgląd i „dokładnie:”, mniej męczy OLED */
-  font-size: 34px;
+  font-size: clamp(26px, 8cqi, 34px);
   line-height: 1.2;
   overflow-wrap: anywhere;
   cursor: copy;
+  border-radius: var(--gem-radius-item, 12px);
 }
+.calc-root .calc-result:focus-visible { outline: 2px solid var(--calc-eq-text); outline-offset: 3px; }
 
 .calc-root .calc-result sup,
 .calc-root .val sup,
@@ -300,6 +320,8 @@ html.gemini .calc-root.is-embedded {
   color: var(--calc-eq-text);
   margin-left: 6px;
   font-weight: 500;
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .calc-root .calc-unit-track {
@@ -313,12 +335,11 @@ html.gemini .calc-root.is-embedded {
 }
 
 .calc-root .calc-unit-track:not(:empty) {
-  padding: 6px 12px;
-  background: var(--calc-key-fn);
-  border-radius: 6px;
+  padding: 8px 12px;
+  background: var(--calc-field);
+  border-radius: var(--gem-radius-item, 12px);
   display: inline-flex;
   align-items: center;
-  border-left: 3px solid var(--calc-eq-text);
 }
 
 .calc-root .unit-sub {
@@ -395,7 +416,7 @@ html.gemini .calc-root.is-embedded {
 
 .calc-root .keys button {
   padding: 11px 0;
-  border-radius: 6px;
+  border-radius: 999px;                  /* pigułki jak przyciski Material 3 w Gemini */
   background: var(--calc-key);
   font-size: 16px;
   user-select: none;
@@ -416,8 +437,7 @@ html.gemini .calc-root.is-embedded {
 .calc-root .keys button.eq {
   background: var(--calc-eq-bg);
   color: var(--calc-eq-text);
-  font-weight: 600;
-  box-shadow: inset 0 0 0 1px var(--calc-eq-line);
+  font-weight: 500;
 }
 
 .calc-root .keys button.eq:hover {
@@ -432,12 +452,10 @@ html.gemini .calc-root.is-embedded {
 .calc-root .hist h2,
 .calc-root .side h2 {
   margin: 0;
-  padding: 10px 12px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--calc-faint);
+  padding: 12px 12px 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--calc-muted);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -450,7 +468,11 @@ html.gemini .calc-root.is-embedded {
   font-weight: 400;
   color: var(--calc-faint);
   font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 12px;
 }
+
+.calc-root :is(.hist, .side) h2 button:hover { background: var(--calc-key-hi); }
 
 .calc-root .hist ol,
 .calc-root .vars ol {
@@ -469,8 +491,8 @@ html.gemini .calc-root.is-embedded {
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding: 4px 12px;
-  border-top: 1px solid var(--calc-line);
+  padding: 8px 12px;
+  border-radius: var(--gem-radius-item, 12px);
   font-size: 13px;
 }
 
@@ -519,10 +541,10 @@ html.gemini .calc-root.is-embedded {
 
 .calc-root .calc-search {
   margin: 4px 12px 8px;
-  padding: 7px 12px;
-  border-radius: 18px;
+  padding: 10px 16px;
+  border-radius: var(--gem-radius-field, 24px);
   border: 0;
-  background: var(--calc-key-fn);
+  background: var(--calc-field);
   color: var(--calc-text);
   outline: none;
   font: inherit;
@@ -547,16 +569,15 @@ html.gemini .calc-root.is-embedded {
 .calc-root .group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 7px 12px 5px;
-  font-size: 11px;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: var(--gem-radius-item, 12px);
+  font-size: 13px;
   color: var(--calc-faint);
   background: none;
   border: 0;
-  border-top: 1px solid var(--calc-line);
   text-align: left;
 }
 
@@ -585,8 +606,9 @@ html.gemini .calc-root.is-embedded {
   gap: 8px;
   width: 100%;
   text-align: left;
-  padding: 4px 12px;
-  border-top: 1px solid var(--calc-line);
+  padding: 8px 12px;
+  min-height: 36px;
+  border-radius: var(--gem-radius-item, 12px);
 }
 
 .calc-root .row:hover {
@@ -640,7 +662,6 @@ html.gemini .calc-root.is-embedded {
 .calc-root .vars li {
   display: flex;
   align-items: stretch;
-  border-top: 1px solid var(--calc-line);
 }
 
 .calc-root .vars li .row {
@@ -686,12 +707,12 @@ html.gemini .calc-root.is-embedded {
   left: 50%;
   top: calc(12px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
-  padding: 6px 14px;
-  border-radius: 6px;
-  background: var(--calc-panel);
+  padding: 10px 16px;
+  border-radius: var(--gem-radius-menu, 20px);
+  background: var(--calc-field);
   color: var(--calc-text);
-  border: 1px solid var(--calc-line);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  border: 0;
+  box-shadow: var(--gem-menu-shadow, 0 0 20px rgba(0, 0, 0, .28));
   font-size: 13px;
   pointer-events: none;
   z-index: 100;

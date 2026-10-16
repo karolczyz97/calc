@@ -11,6 +11,16 @@ const OP_START = /^[+×÷*/^!%]/;   // działanie bez pierwszej liczby: +2 → a
 
 const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x);
 const oneOf = (v, list, d) => (list.includes(v) ? v : d);
+const icon = (shape) => `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${shape}</svg>`;
+const MODE_ICON = {
+  dark: icon('<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/>'),
+  light: icon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/>'),
+  auto: icon('<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/>')
+};
+const PALETTE_ICON = {
+  gemini: icon('<path d="M12 3c1.4 5.2 3.8 7.6 9 9-5.2 1.4-7.6 3.8-9 9-1.4-5.2-3.8-7.6-9-9 5.2-1.4 7.6-3.8 9-9Z"/>'),
+  system: icon('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>')
+};
 
 // Zapis z localStorage może być uszkodzony – wtedy go pomijamy,
 // zamiast wyłożyć cały kalkulator. Jednostka to { kg: 1, m: 2 }, ślad jednostek – { text, tex }.
@@ -68,7 +78,6 @@ export function mountCalculator(container, options = {}) {
   // Motyw w trybie samodzielnym
   let colorMode = oneOf(store.get('colorMode', 'auto'), MODES, 'auto');
   let palette = oneOf(store.get('palette', 'gemini'), ['gemini', 'system'], 'gemini');
-  const MODE_ICON = { dark: '☾', light: '☀', auto: '◐' };
   const MODE_NAME = { dark: 'ciemny', light: 'jasny', auto: 'jak w systemie' };
   const systemDark = matchMedia('(prefers-color-scheme: dark)');
 
@@ -86,8 +95,8 @@ export function mountCalculator(container, options = {}) {
               <button data-m="rad" title="Kąty w radianach">RAD</button>
             </div>
             <div class="icons">
-              <button id="calc-mode-btn" class="icon" aria-label="Tryb jasny / ciemny / systemowy">☾</button>
-              <button id="calc-palette-btn" class="icon" aria-label="Paleta standardowa / Gemini">✦</button>
+              <button id="calc-mode-btn" class="icon" aria-label="Tryb jasny / ciemny / systemowy">${MODE_ICON[colorMode]}</button>
+              <button id="calc-palette-btn" class="icon" aria-label="Paleta standardowa / Gemini">${PALETTE_ICON[palette]}</button>
             </div>
             <div class="seg" id="calc-sig" title="Cyfry znaczące wyniku">
               <span style="padding:2px 4px">cyfry:</span>
@@ -96,14 +105,15 @@ export function mountCalculator(container, options = {}) {
           </div>
           <div class="calc-expr-wrap">
             <input id="calc-expr" class="calc-expr mono" autocomplete="off" autocapitalize="off" spellcheck="false"
-                   placeholder="np. sqrt(2*g*h)  albo  v = 12">
+                   aria-label="Działanie" placeholder="np. sqrt(2*g*h)  albo  v = 12">
             <div id="calc-ghost" class="calc-ghost mono" aria-hidden="true" hidden><span class="typed"></span><span class="rest" title="Dokończ (Tab)"></span></div>
           </div>
           <div id="calc-preview" class="calc-preview mono"></div>
           <div id="calc-last-expr" class="calc-last-expr mono"></div>
-          <div id="calc-result" class="calc-result mono" title="Kliknij, żeby wstawić do działania · dwuklik kopiuje">0</div>
+          <div id="calc-result" class="calc-result mono" role="button" tabindex="0" aria-live="polite" aria-describedby="calc-result-help" title="Kliknij lub Enter, żeby wstawić · dwuklik lub Ctrl+C kopiuje">0</div>
           <div id="calc-unit-track" class="calc-unit-track mono"></div>
           <div id="calc-result-raw" class="calc-result-raw mono"></div>
+          <span id="calc-result-help" hidden>Enter wstawia wynik do działania, Ctrl+C lub Command+C kopiuje</span>
         </div>
 
         <div class="panel keys" id="calc-keys" style="margin-top:14px">
@@ -155,7 +165,7 @@ export function mountCalculator(container, options = {}) {
           <ol id="calc-vars"></ol>
         </div>
         <h2>Stałe fizyczne</h2>
-        <input id="calc-search" class="calc-search" placeholder="Szukaj: masa, ładunek, Ziemia…" autocomplete="off">
+        <input id="calc-search" class="calc-search" aria-label="Szukaj stałej" placeholder="Szukaj: masa, ładunek, Ziemia…" autocomplete="off">
         <div class="consts" id="calc-consts"></div>
       </aside>
     </main>
@@ -331,7 +341,7 @@ export function mountCalculator(container, options = {}) {
     const parts = [];
     const fr = toFraction(v);
     if (fr) parts.push('ułamek: ' + withUnit(fracHtml(fr), u));
-    if (!(sig === 'auto' && f.text === exactText(v))) parts.push('dokładnie: ' + withUnit(esc(exactText(v)), u));
+    if (!(sig === 'auto' && f.text === exactText(v).replace('e+', 'e'))) parts.push('dokładnie: ' + withUnit(esc(exactText(v)), u));
     resultRaw.innerHTML = parts.join(' &nbsp;·&nbsp; ');
   }
 
@@ -447,6 +457,7 @@ export function mountCalculator(container, options = {}) {
       const open = !!q || !closed.has(name);
       const head = document.createElement('button');
       head.className = 'group' + (open ? ' open' : '');
+      head.setAttribute('aria-expanded', String(open));
       head.innerHTML = `<span class="caret">${open ? '▾' : '▸'}</span><span>${esc(name)}</span><span class="count">${list.length}</span>`;
       head.onclick = (e) => {
         e?.stopPropagation?.();
@@ -461,8 +472,14 @@ export function mountCalculator(container, options = {}) {
   }
 
   function renderModes() {
-    for (const b of angleEl.querySelectorAll('button')) b.classList.toggle('on', b.dataset.m === angle);
-    for (const b of sigEl.querySelectorAll('button')) b.classList.toggle('on', b.dataset.s === sig);
+    for (const b of angleEl.querySelectorAll('button')) {
+      b.classList.toggle('on', b.dataset.m === angle);
+      b.setAttribute('aria-pressed', String(b.dataset.m === angle));
+    }
+    for (const b of sigEl.querySelectorAll('button')) {
+      b.classList.toggle('on', b.dataset.s === sig);
+      b.setAttribute('aria-pressed', String(b.dataset.s === sig));
+    }
   }
 
   function applyStandaloneTheme() {
@@ -471,9 +488,9 @@ export function mountCalculator(container, options = {}) {
     document.documentElement.setAttribute('data-mode', dark ? 'dark' : 'light');
     document.documentElement.setAttribute('data-palette', palette);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#131314' : '#ffffff');
-    modeBtn.textContent = MODE_ICON[colorMode];
+    modeBtn.innerHTML = MODE_ICON[colorMode];
     modeBtn.title = `Tryb: ${MODE_NAME[colorMode]} – kliknij: ciemny / jasny / systemowy (Ctrl+M)`;
-    paletteBtn.textContent = palette === 'gemini' ? '✦' : '▣';
+    paletteBtn.innerHTML = PALETTE_ICON[palette];
     paletteBtn.title = `Kolory: ${palette === 'gemini' ? 'Gemini' : 'standardowe (systemowe)'} – kliknij, żeby zmienić (Ctrl+Shift+M)`;
   }
 
@@ -507,6 +524,7 @@ export function mountCalculator(container, options = {}) {
   });
 
   expr.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;          // klawiatura IME (np. Android) kończy właśnie słowo
     if (e.key === 'Enter') {
       e.preventDefault();
       run();
@@ -587,13 +605,25 @@ export function mountCalculator(container, options = {}) {
     }, 220);
   });
 
-  result.addEventListener('dblclick', async () => {
+  async function copyResult() {
     clearTimeout(resultClickTimer);
     resultClickTimer = null;
     const t = result.dataset.copy;
     if (!t) return;
     try { await navigator.clipboard.writeText(t); flash('Skopiowano: ' + t); }
     catch { flash('Nie udało się skopiować – schowek jest tu niedostępny'); }   // np. strona bez https
+  }
+  result.addEventListener('dblclick', copyResult);
+  result.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      e.stopPropagation();
+      copyResult();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (result.dataset.insert) insertValue(result.dataset.insert);
+    }
   });
 
   const onDocKeyDown = (e) => {
@@ -601,6 +631,8 @@ export function mountCalculator(container, options = {}) {
     if (document.activeElement === expr || document.activeElement === searchEl) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (isEmbedded && !container.contains(document.activeElement)) return;
+    // Enter i Spacja na przycisku wybranym Tabem naciskają ten przycisk
+    if ((e.key === 'Enter' || e.key === ' ') && e.target?.closest?.('button, [role="button"]')) return;
     // W DarkPDF litery poza polem działania to skróty czytnika (D, T, P…) – nie przerzucamy ich do pola
     if (isEmbedded && /^[a-zA-Z?]$/.test(e.key)) return;
     if (e.key.length === 1 || e.key === 'Enter' || e.key === 'Backspace') {

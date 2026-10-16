@@ -4,7 +4,7 @@
 // oczekiwań pod nowy wynik, dopóki nie sprawdzisz, że nowy wynik jest poprawny.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluate, complete, unitLabel, insertText, copyText, CONST, CONSTS, CalcError, fmt } from '../calc-engine.js';
+import { evaluate, complete, unitLabel, insertText, copyText, exactText, CONST, CONSTS, CalcError, fmt } from '../calc-engine.js';
 
 const VARS = {m: {v: 2,u: {kg: 1}},s: {v: 100,u: {m: 1}},h: {v: 5,u: {m: 1}},t: {v: 10,u: {s: 1}},r: {v: 3,u: {m: 1}},T: {v: 300,u: {K: 1}},x1: {v: 7,u: {}},m2: {v: 3,u: {kg: 1}},V: {v: 2,u: {m: 3}}};
 const CTX = { none: {}, vars: { vars: VARS }, rad: { angle: 'rad' }, ans: { ans: { v: 2, u: { kg: 1 } } } };
@@ -597,4 +597,50 @@ test('formatowanie liczb', () => {
   assert.equal(insertText(299792458, { m: 1, s: -1 }), '299792458 m/s');
   assert.equal(insertText(6.02214076e23, { mol: -1 }), '6,02214076e+23 1/mol');
   assert.equal(copyText(9.81, { m: 1, s: -2 }), '9,81 m/s²');
+});
+
+test('trygonometria zachowuje małe wyniki i odróżnia kąty blisko osobliwości', () => {
+  for (const angle of ['deg', 'rad']) {
+    const x = 1e-13;
+    const rad = angle === 'deg' ? x * Math.PI / 180 : x;
+    assert.ok(close(evaluate(`sin(${x})`, { angle }).v, Math.sin(rad)));
+    assert.ok(close(evaluate(`tg(${x})`, { angle }).v, Math.tan(rad)));
+    assert.ok(close(evaluate(`ctg(${x})`, { angle }).v, 1 / Math.tan(rad)));
+  }
+  assert.ok(close(evaluate('tg(89,99999999999)').v, Math.tan(89.99999999999 * Math.PI / 180)));
+  assert.equal(evaluate('sin(180)').v, 0);
+  assert.equal(evaluate('cos(pi/2)', { angle: 'rad' }).v, 0);
+  assert.throws(() => evaluate('tg(pi/2)', { angle: 'rad' }), /nieokreślony/);
+  assert.throws(() => evaluate('ctg(0)'), /nieokreślony/);
+});
+
+test('round obsługuje bardzo duże, małe i zerowe skale bez przepełnienia', () => {
+  for (const [src, value] of [
+    ['round(2,5; 309)', 2.5], ['round(123; -310)', 0], ['round(0; 309)', 0],
+    ['round(2,5e-20; 20)', 3e-20], ['round(-2,5e-20; 20)', -3e-20],
+    ['round(5e-324; 324)', 5e-324], ['round(1e308; 2)', 1e308]
+  ]) assert.equal(evaluate(src).v, value, src);
+});
+
+test('podpowiedzi po jednostkach i operatorach zachowują kontekst jednostki', () => {
+  for (const src of ['2 m * sq', '2 m × sq', '2 m/s · sq']) assert.equal(complete(src), 'rt(');
+  assert.equal(complete('10 kg / co'), 's(');
+  assert.equal(complete('10 km/mi'), '');
+  assert.equal(complete('5 k'), '');
+});
+
+test('jednostki nie przyjmują drugiego przedrostka ani przedrostków czasu', () => {
+  for (const unit of ['kkWh', 'mkmh', 'kmmHg', 'mh']) assert.throws(() => evaluate(`1 ${unit}`), CalcError);
+  for (const src of ['1 kWh', '1 MWh', '1 mAh', '1 kpc', '1 kcal', '1 mrad']) assert.doesNotThrow(() => evaluate(src));
+});
+
+test('tona przyjmuje tylko kt, Mt, Gt – ft, ct, at, pt to nie pikotony', () => {
+  for (const unit of ['ft', 'ct', 'at', 'pt', 'mt', 'Ypc']) assert.throws(() => evaluate(`1 ${unit}`), CalcError);
+  assert.equal(evaluate('1 kt').v, 1e6);
+  assert.equal(evaluate('1 Gt').v, 1e12);
+});
+
+test('dokładny zapis tuż pod granicą liczb nie staje się Infinity', () => {
+  assert.equal(exactText(Number.MAX_VALUE), '1,7976931348623157e+308');
+  assert.equal(evaluate(insertText(Number.MAX_VALUE, {})).v, Number.MAX_VALUE);
 });

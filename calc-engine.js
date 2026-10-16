@@ -61,6 +61,14 @@ const PREFIX = dict({
   Y: 1e24, Z: 1e21, E: 1e18, P: 1e15, T: 1e12, G: 1e9, M: 1e6, k: 1e3, h: 1e2, da: 10,
   d: 1e-1, c: 1e-2, m: 1e-3, μ: 1e-6, u: 1e-6, n: 1e-9, p: 1e-12, f: 1e-15, a: 1e-18   // u = µ z klawiatury (4,7 uF)
 });
+// Jednostki spoza SI, które przyjmują przedrostek; lista = tylko te przedrostki. Tona tylko kt, Mt, Gt:
+// inaczej „1 ft”, „1 ct”, „1 at” po cichu liczyły się jako piko-, centy- i attotony.
+const ANY_PREFIX = null;
+const PREFIXABLE_EXTRA = dict({
+  g: ANY_PREFIX, t: ['k', 'M', 'G'], L: ANY_PREFIX, l: ANY_PREFIX, bar: ANY_PREFIX, eV: ANY_PREFIX, u: ANY_PREFIX,
+  pc: ['k', 'M', 'G'], Wh: ANY_PREFIX, Ah: ANY_PREFIX, cal: ANY_PREFIX
+});
+const prefixAllowed = (unit, p) => has(PREFIXABLE_EXTRA, unit) && (PREFIXABLE_EXTRA[unit] === ANY_PREFIX || PREFIXABLE_EXTRA[unit].includes(p));
 
 // Symbol bez przedrostka (m, kg, N, h, eV…) → { u, f } albo null
 const plainCache = new Map();
@@ -86,7 +94,7 @@ function unitOf(name) {
   for (const p of ['da', name[0]]) {
     if (name.length <= p.length || !name.startsWith(p) || !has(PREFIX, p)) continue;
     const rest = name.slice(p.length);
-    if (rest === 'kg') continue;
+    if (rest === 'kg' || (has(EXTRA, rest) && !prefixAllowed(rest, p))) continue;
     const inner = plainUnit(rest);
     if (inner) return { u: inner.u, f: inner.f * PREFIX[p] };
   }
@@ -370,25 +378,34 @@ for (const [id, sym, name, value, unit, group, aliases = []] of CONSTS) {
 let angleMode = 'deg';                  // ustawiane w evaluate() na czas jednego obliczenia
 const toRad = (x) => angleMode === 'deg' ? x * Math.PI / 180 : x;
 const fromRad = (x) => angleMode === 'deg' ? x * 180 / Math.PI : x;
-const clean = (x) => Math.abs(x) < 1e-14 ? 0 : x;
+const quadrant = (x) => {
+  const q = angleMode === 'deg' ? x / 90 : x / (Math.PI / 2);
+  return Number.isSafeInteger(q) ? ((q % 4) + 4) % 4 : null;
+};
+const sin = (x) => { const q = quadrant(x); return q === null ? Math.sin(toRad(x)) : [0, 1, 0, -1][q]; };
+const cos = (x) => { const q = quadrant(x); return q === null ? Math.cos(toRad(x)) : [1, 0, -1, 0][q]; };
 const inUnit = (x, f) => { if (x < -1 || x > 1) throw err(`${f}: argument musi być z przedziału [−1; 1]`); return x; };
 const pos = (x, f) => { if (x <= 0) throw err(`${f}: argument musi być dodatni`); return x; };
 
-const tg = (x) => { const r = toRad(x); if (Math.abs(Math.cos(r)) < 1e-12) throw err('tg nieokreślony dla tego kąta'); return clean(Math.tan(r)); };
-const ctg = (x) => { const r = toRad(x); if (Math.abs(Math.sin(r)) < 1e-12) throw err('ctg nieokreślony dla tego kąta'); return clean(Math.cos(r) / Math.sin(r)); };
+const tg = (x) => { if (cos(x) === 0) throw err('tg nieokreślony dla tego kąta'); return quadrant(x) === null ? Math.tan(toRad(x)) : 0; };
+const ctg = (x) => { if (sin(x) === 0) throw err('ctg nieokreślony dla tego kąta'); return cos(x) / sin(x); };
 
 // Zaokrąglenie „jak na kalkulatorze”: połówki od zera (2,5 → 3, −2,5 → −3), a 1,005 → 1,01,
 // chociaż w zapisie binarnym 1,005 to 1,00499… (poprawka o jeden najmniejszy krok liczby)
 function roundTo(x, n = 0) {
   if (!Number.isInteger(n)) throw err('round: liczba miejsc musi być liczbą całkowitą');
-  const a = Math.abs(x) * (1 + Number.EPSILON);
-  const r = n >= 0 ? Math.round(a * 10 ** n) / 10 ** n : Math.round(a / 10 ** -n) * 10 ** -n;
-  return Math.sign(x) * r;
+  if (x === 0 || !Number.isFinite(x)) return x;
+  const [mantissa, exponent] = Math.abs(x).toExponential().split('e');
+  const shifted = Number(exponent) + n;
+  if (shifted > 15) return x;       // dokładność Number nie pozwala już zmienić tej liczby
+  if (shifted < -1) return Math.sign(x) * 0;
+  const rounded = Math.round(Number(`${mantissa}e${shifted}`) * (1 + Number.EPSILON));
+  return Math.sign(x) * Number(`${rounded}e${-n}`);
 }
 
 const FUNCS = dict({
-  sin: [1, 1, (x) => clean(Math.sin(toRad(x)))],
-  cos: [1, 1, (x) => clean(Math.cos(toRad(x)))],
+  sin: [1, 1, sin],
+  cos: [1, 1, cos],
   tg: [1, 1, tg], tan: [1, 1, tg],
   ctg: [1, 1, ctg], cot: [1, 1, ctg],
   arcsin: [1, 1, (x) => fromRad(Math.asin(inUnit(x, 'arcsin')))],
@@ -687,7 +704,7 @@ function unitPiece(raw, u) {
   return { text, tex: raw ? rawToTex(raw) : uTex(u), prec: /[·/]/.test(text) ? 2 : /[⁰¹²³⁴⁵⁶⁷⁸⁹⁻^]/.test(text) ? 3 : 9 };
 }
 
-function unitLine(tree, vars, ans) {
+function unitLine(tree, vars, ans, result) {
   const evq = (node) => evaluateTree(node, vars, ans);
   const paren = (s, need) => (need ? { text: `(${s.text})`, tex: `\\left(${s.tex}\\right)` } : s);
 
@@ -733,7 +750,7 @@ function unitLine(tree, vars, ans) {
 
   const w = walk(tree);
   if (w.bare) return null;
-  const { u } = evq(tree), name = uName(u);
+  const { u } = result, name = uName(u);
   const steps = [[w.text, w.tex], [uText(u) || '1', uTex(u) || '1']];
   if (name) steps.push([name, `\\text{${name}}`]);
   // bez powtórzeń: „1 / s” i „1/s” to ten sam krok
@@ -778,6 +795,7 @@ const BUILTIN_NAMES = [
   ...CONSTS.flatMap(([id, , , , , , aliases = []]) => [id, ...aliases]).map((n) => [n, ''])
 ];
 const names = (vars) => [...Object.keys(vars).map((n) => [n, '']), ...BUILTIN_NAMES];
+const UNIT_NAMES = [...BASE, ...Object.keys(DERIVED), ...Object.keys(EXTRA)];
 
 export function complete(src, vars = {}) {
   if (!src.trim()) return '';
@@ -785,7 +803,10 @@ export function complete(src, vars = {}) {
   if (word) {
     // litery zaraz za liczbą to jednostka (10 km/mi…) – tam nazw nie podpowiadamy
     const operand = src.slice(0, src.length - word.length).split(/[-+(=;,−–]/).pop();
-    if (!/^\s*[\d.,]+\s*[A-Za-zΩµμ]/.test(operand + word)) {
+    const unitContext = /^\s*[\d.,]+\s*[A-Za-zΩµμ]/.test(operand + word);
+    const afterOperator = /[*\/×÷·⋅∙]\s*$/.test(operand);
+    const unitPrefix = UNIT_NAMES.some((name) => name.startsWith(word));
+    if (!unitContext || (afterOperator && !unitPrefix)) {
       const all = names(vars);
       const exact = all.find(([n]) => n === word);
       if (exact?.[1]) return exact[1];                                  // sqrt → „(”
@@ -840,7 +861,11 @@ export function toFraction(x, maxDen = 1000) {
   return null;
 }
 
-export const exactText = (x) => String(+x.toPrecision(15)).replace('.', ',');
+// 15 cyfr; tuż pod granicą Number zaokrąglenie dałoby Infinity, więc wtedy pełny zapis
+export const exactText = (x) => {
+  const r = +x.toPrecision(15);
+  return String(Number.isFinite(r) ? r : x).replace('.', ',');
+};
 // Wynik do wstawienia w pole działania i do schowka – oba da się wkleić z powrotem
 const withUnit = (v, s) => exactText(v) + (s ? ' ' + s : '');
 export const insertText = (v, u) => withUnit(v, uInline(u));
@@ -892,5 +917,5 @@ export function evaluate(raw, { vars = {}, ans = { v: 0, u: {} }, angle = 'deg' 
   treeNotes(tree, vars, ans, notes);
   if (Number.isNaN(q.v)) throw err('Wynik nieokreślony');
   if (!Number.isFinite(q.v)) throw err('Wynik poza zakresem');
-  return { assign, v: q.v, u: q.u, src, units: unitLine(tree, vars, ans), notes: [...notes] };
+  return { assign, v: q.v, u: q.u, src, units: unitLine(tree, vars, ans, q), notes: [...notes] };
 }

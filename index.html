@@ -7,8 +7,9 @@
 <meta name="theme-color" content="#131314">
 <title>Kalkulator naukowy</title>
 <!-- KaTeX: ślad jednostek w drugiej linii wyniku -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous" onload="window.onKatexLoaded && window.onKatexLoaded()"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous">
+<!-- async, nie defer: moduł kalkulatora nie czeka na CDN (bez KaTeX ślad jednostek jest zwykłym tekstem) -->
+<script async src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous" onload="window.onKatexLoaded && window.onKatexLoaded()"></script>
 <!-- Wspólna paleta Gemini z repo darkpdf (na GitHub Pages i w server.js leży obok: /darkpdf/) -->
 <link rel="stylesheet" href="../darkpdf/theme.css">
 <link rel="stylesheet" href="calc.css">
