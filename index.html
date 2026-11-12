@@ -6,6 +6,9 @@
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#131314">
 <title>Kalkulator naukowy</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <!-- KaTeX: ślad jednostek w drugiej linii wyniku -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous">
 <!-- async, nie defer: moduł kalkulatora nie czeka na CDN (bez KaTeX ślad jednostek jest zwykłym tekstem) -->
@@ -17,7 +20,7 @@
   /* tło poza kalkulatorem (np. przy przewinięciu) w kolorze motywu */
   html { color-scheme: dark; background: Canvas; }
   html[data-mode="light"] { color-scheme: light; }
-  html[data-mode="dark"][data-palette="gemini"] { background: var(--gem-bg, #0f0f0f); }
+  html[data-palette="gemini"] { background: var(--gem-bg, #0f0f0f); }
   body { margin: 0; }
   #calc-app, #calc-app.calc-root { min-height: 100vh; min-height: 100dvh; }   /* dvh: bez paska adresu telefonu */
 </style>

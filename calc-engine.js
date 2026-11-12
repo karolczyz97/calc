@@ -421,7 +421,11 @@ const FUNCS = dict({
     return Math.pow(x, 1 / n);
   }],
   ln: [1, 1, (x) => Math.log(pos(x, 'ln'))],
-  log: [1, 2, (x, b) => b === undefined ? Math.log10(pos(x, 'log')) : Math.log(pos(x, 'log')) / Math.log(pos(b, 'log (podstawa)'))],
+  log: [1, 2, (x, b) => {
+    if (b === undefined) return Math.log10(pos(x, 'log'));
+    if (b === 1) throw err('log: podstawa nie może być 1');
+    return Math.log(pos(x, 'log')) / Math.log(pos(b, 'log (podstawa)'));
+  }],
   log2: [1, 1, (x) => Math.log2(pos(x, 'log2'))],
   log10: [1, 1, (x) => Math.log10(pos(x, 'log10'))],   // bez tego log10(100) to log(10)·100 = 100
   exp: [1, 1, Math.exp],
@@ -654,6 +658,7 @@ function evaluateTree(n, vars, ans) {
           case '^': {
             if (!uNone(b.u)) throw err('Wykładnik potęgi nie może mieć jednostki');
             if (a.v < 0 && !Number.isInteger(b.v)) throw err('Potęga o niecałkowitym wykładniku z liczby ujemnej');
+            if (a.v === 0 && b.v < 0) throw err('Dzielenie przez zero: 0 do potęgi ujemnej');
             return Q(Math.pow(a.v, b.v), uPow(a.u, b.v));
           }
         }

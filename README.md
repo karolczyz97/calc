@@ -27,6 +27,7 @@ npm run lint
 | `calc-app.js` | interfejs: pole działania, klawiatura, historia, zmienne, stałe |
 | `calc.css` | wygląd (samodzielnie i w DarkPDF) |
 | `sw.js` | pamięć podręczna do pracy offline |
+| `manifest.webmanifest`, `icon*` | instalacja jako aplikacja i ikona |
 
 Po wdrożeniu nie trzeba podbijać numerów `?v=` – `sw.js` zawsze sprawdza na serwerze, czy plik się zmienił.
 Przy wolnej sieci po dwóch sekundach korzysta z cache, jeśli dana odpowiedź jest zapisana.

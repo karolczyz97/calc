@@ -31,8 +31,8 @@ html:not(.dark) .calc-root.is-embedded {
   --calc-shadow: 0 1px 3px rgba(60, 64, 67, .15);
 }
 
-/* Gemini – kolory ze wspólnej palety darkpdf/theme.css (tylko w trybie ciemnym) */
-html[data-mode="dark"][data-palette="gemini"] .calc-root,
+/* Gemini – kolory ze wspólnej palety darkpdf/theme.css (ciemna albo jasna, zależnie od trybu) */
+html[data-palette="gemini"] .calc-root,
 html.gemini .calc-root.is-embedded {
   --calc-bg: var(--gem-bg, #0f0f0f);
   --calc-panel: var(--gem-bg, #0f0f0f);

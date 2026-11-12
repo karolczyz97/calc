@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Ikona kalkulatora: obudowa, wyświetlacz w gradiencie Gemini (jak ikona DarkPDF) i klawisze -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#4285f4"/>
+      <stop offset=".45" stop-color="#9b72cb"/>
+      <stop offset="1" stop-color="#d96570"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#131314"/>
+  <rect x="136" y="88" width="240" height="336" rx="40" fill="#1f1f1f" stroke="#e3e3e3" stroke-width="20"/>
+  <rect x="176" y="132" width="160" height="72" rx="16" fill="url(#g)"/>
+  <g fill="#e3e3e3">
+    <circle cx="196" cy="262" r="17"/><circle cx="256" cy="262" r="17"/><circle cx="316" cy="262" r="17"/>
+    <circle cx="196" cy="318" r="17"/><circle cx="256" cy="318" r="17"/><circle cx="316" cy="318" r="17"/>
+    <circle cx="196" cy="374" r="17"/><circle cx="256" cy="374" r="17"/>
+  </g>
+  <circle cx="316" cy="374" r="17" fill="#a8c7fa"/>
+</svg>

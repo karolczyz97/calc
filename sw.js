@@ -1,8 +1,8 @@
 // Kalkulator – pamięć podręczna, dzięki której działa bez internetu.
 // Strona i motyw: najpierw z sieci (zawsze świeże, bez ręcznych ?v=), bez sieci – ostatnia zapisana wersja.
 // KaTeX z CDN ma stały numer wersji, więc bierzemy go od razu z pamięci.
-const CACHE = 'calc-v11';
-const CORE = ['./', 'index.html', 'calc.css', 'calc-app.js', 'calc-engine.js',
+const CACHE = 'calc-v12';
+const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'calc.css', 'calc-app.js', 'calc-engine.js',
   '../darkpdf/theme.css', '../darkpdf/fonts/google-sans-flex-latin.woff2',
   '../darkpdf/fonts/google-sans-flex-latin-ext.woff2'];   // wspólna paleta i font
 
