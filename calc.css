@@ -537,6 +537,7 @@ html.gemini .calc-root.is-embedded {
   position: sticky;
   top: 14px;
   max-height: calc(100vh - 28px);
+  max-height: calc(100dvh - 28px);
 }
 
 .calc-root .calc-search {

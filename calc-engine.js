@@ -662,7 +662,8 @@ function evaluateTree(n, vars, ans) {
       case 'call': {
         const [min, max, fn] = FUNCS[node.f];
         if (node.args.length < min || node.args.length > max) {
-          throw err(min === max ? `${node.f}: potrzebne ${min} argument(y)` : `${node.f}: od ${min} do ${max} argumentów`);
+          const needed = min === 1 ? 'potrzebny 1 argument' : `potrzebne ${min} argumenty`;
+          throw err(min === max ? `${node.f}: ${needed}` : `${node.f}: od ${min} do ${max} argumentów`);
         }
         const args = node.args.map(evq);
         if (node.f === 'round' && args[1] && !uNone(args[1].u)) throw err('round: liczba miejsc nie może mieć jednostki');

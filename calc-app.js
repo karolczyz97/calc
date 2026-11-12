@@ -78,7 +78,9 @@ export function mountCalculator(container, options = {}) {
   // Motyw w trybie samodzielnym
   let colorMode = oneOf(store.get('colorMode', 'auto'), MODES, 'auto');
   let palette = oneOf(store.get('palette', 'gemini'), ['gemini', 'system'], 'gemini');
-  const MODE_NAME = { dark: 'ciemny', light: 'jasny', auto: 'jak w systemie' };
+  // Te same nazwy co w menu DarkPDF (theme.js)
+  const MODE_NAME = { dark: 'Ciemny', light: 'Jasny', auto: 'Auto' };
+  const PALETTE_NAME = { gemini: 'Gemini', system: 'Systemowy' };
   const systemDark = matchMedia('(prefers-color-scheme: dark)');
 
   container.classList.add('calc-root');
@@ -95,8 +97,8 @@ export function mountCalculator(container, options = {}) {
               <button data-m="rad" title="Kąty w radianach">RAD</button>
             </div>
             <div class="icons">
-              <button id="calc-mode-btn" class="icon" aria-label="Tryb jasny / ciemny / systemowy">${MODE_ICON[colorMode]}</button>
-              <button id="calc-palette-btn" class="icon" aria-label="Paleta standardowa / Gemini">${PALETTE_ICON[palette]}</button>
+              <button id="calc-mode-btn" class="icon" aria-label="Tryb: ciemny / jasny / auto">${MODE_ICON[colorMode]}</button>
+              <button id="calc-palette-btn" class="icon" aria-label="Motyw: Gemini / systemowy">${PALETTE_ICON[palette]}</button>
             </div>
             <div class="seg" id="calc-sig" title="Cyfry znaczące wyniku">
               <span style="padding:2px 4px">cyfry:</span>
@@ -489,9 +491,9 @@ export function mountCalculator(container, options = {}) {
     document.documentElement.setAttribute('data-palette', palette);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#131314' : '#ffffff');
     modeBtn.innerHTML = MODE_ICON[colorMode];
-    modeBtn.title = `Tryb: ${MODE_NAME[colorMode]} – kliknij: ciemny / jasny / systemowy (Ctrl+M)`;
+    modeBtn.title = `Tryb: ${MODE_NAME[colorMode]} – kliknij: ciemny / jasny / auto (Ctrl+M)`;
     paletteBtn.innerHTML = PALETTE_ICON[palette];
-    paletteBtn.title = `Kolory: ${palette === 'gemini' ? 'Gemini' : 'standardowe (systemowe)'} – kliknij, żeby zmienić (Ctrl+Shift+M)`;
+    paletteBtn.title = `Motyw: ${PALETTE_NAME[palette]} – kliknij, żeby zmienić (Ctrl+Shift+M)`;
   }
 
   function cycleMode() {
@@ -505,7 +507,7 @@ export function mountCalculator(container, options = {}) {
     palette = palette === 'gemini' ? 'system' : 'gemini';
     store.set('palette', palette);
     applyStandaloneTheme();
-    flash(palette === 'gemini' ? 'Kolory: Gemini' : 'Kolory: standardowe (systemowe)');
+    flash(`Motyw: ${PALETTE_NAME[palette]}`);
   }
 
   function themeKey(e) {
