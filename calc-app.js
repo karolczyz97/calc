@@ -35,7 +35,7 @@ function loadVars(raw) {
   const out = Object.create(null);          // bez prototypu: zmienna „constructor” to zwykła nazwa
   if (!isObj(raw)) return out;
   for (const [name, val] of Object.entries(raw)) {
-    if (isObj(val) && Number.isFinite(val.v)) out[name] = { v: val.v, u: siUnit(val.u), ang: val.ang === true };
+    if (isObj(val) && Number.isFinite(val.v)) out[name] = { v: val.v, u: siUnit(val.u), ang: val.ang === true, mode: oneOf(val.mode, ['deg', 'rad'], undefined) };
   }
   return out;
 }
@@ -43,7 +43,7 @@ function loadVars(raw) {
 function loadHist(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.filter((h) => isObj(h) && typeof h.e === 'string' && Number.isFinite(h.v))
-    .map((h) => ({ e: h.e, v: h.v, u: siUnit(h.u), ang: h.ang === true, units: unitTrace(h.units) }))
+    .map((h) => ({ e: h.e, v: h.v, u: siUnit(h.u), ang: h.ang === true, mode: oneOf(h.mode, ['deg', 'rad'], undefined), units: unitTrace(h.units) }))
     .slice(0, HIST_MAX);
 }
 
@@ -96,7 +96,7 @@ export function mountCalculator(container, options = {}) {
   let vars = loadVars(store.get('vars', {}));
   let hist = loadHist(store.get('hist', []));
   const emptyAns = () => ({ v: 0, u: {}, ang: false });
-  let ans = hist.length ? { v: hist[0].v, u: hist[0].u, ang: hist[0].ang } : emptyAns();
+  let ans = hist.length ? { v: hist[0].v, u: hist[0].u, ang: hist[0].ang, mode: hist[0].mode } : emptyAns();
   let histPos = -1;                 // który wpis historii jest w polu (↑ ↓); -1 = własne działanie
   let draft = '';                   // własne działanie sprzed pierwszego ↑
   const closedRaw = store.get('closedGroups', GROUPS_CLOSED);
@@ -404,17 +404,17 @@ export function mountCalculator(container, options = {}) {
     const src = expr.value.trim();
     if (!src) return;
     try {
-      const { assign, v, u, ang, src: full, units, notes } = calc(src);
+      const { assign, v, u, ang, mode, src: full, units, notes } = calc(src);
       if (assign) {
-        vars[assign] = { v, u, ang };
+        vars[assign] = { v, u, ang, mode };
         store.set('vars', vars);
         renderVars();
       }
-      ans = { v, u, ang };
+      ans = { v, u, ang, mode };
       // To samo działanie drugi raz z rzędu (↑ i Enter, odświeżenie strony z ?expr=) nie dubluje historii
       const repeated = hist[0] && hist[0].e === full && hist[0].v === v && unitLabel(hist[0].u) === unitLabel(u);
       if (!repeated) {
-        hist.unshift({ e: full, v, u, ang, units });
+        hist.unshift({ e: full, v, u, ang, mode, units });
         hist = hist.slice(0, HIST_MAX);
         store.set('hist', hist);
       }

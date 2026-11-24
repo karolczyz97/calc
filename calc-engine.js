@@ -648,6 +648,11 @@ const U_KEEP = new Set(['abs', 'floor', 'ceil', 'min', 'max']);
 function evaluateTree(tree, ctx) {
   const { vars, ans, angle } = ctx;
   const asSi = (q) => (q.ang && angle === 'deg' ? q.v * Math.PI / 180 : q.v);
+  // Zapisany kąt (zmienna, ans) pamięta tryb, w którym go policzono – po przełączeniu DEG/RAD przeliczamy go
+  const stored = (r) => {
+    if (!r.ang || !r.mode || r.mode === angle) return Q(r.v, r.u || {}, Boolean(r.ang));
+    return Q(r.mode === 'deg' ? r.v * Math.PI / 180 : r.v * 180 / Math.PI, r.u || {}, true);
+  };
   const operands = (a, b) => ((a.ang || b.ang) && (!uNone(a.u) || !uNone(b.u)) ? [asSi(a), asSi(b)] : [a.v, b.v]);
 
   function evq(node) {
@@ -660,8 +665,8 @@ function evaluateTree(tree, ctx) {
       case 'num': return Q(node.v, node.u);
       case 'var': {
         const name = node.name;
-        if (has(vars, name)) return Q(vars[name].v, vars[name].u || {}, Boolean(vars[name].ang));
-        if (name === 'ans') return Q(ans.v, ans.u || {}, Boolean(ans.ang));
+        if (has(vars, name)) return stored(vars[name]);
+        if (name === 'ans') return stored(ans);
         if (has(CONST, name)) return Q(CONST[name].value, CONST[name].u);
         if (unitOf(name)) throw err(`„${name}” to jednostka – pisz ją zaraz za liczbą, np. 5 ${name}`);
         throw err(`Nieznana nazwa: ${name}`);
@@ -958,8 +963,8 @@ function treeNotes(node, ctx, notes) {
 }
 
 // ================= Wejście silnika =================
-// evaluate('v = 72 km/h', { vars, ans, angle }) → { assign, v, u, ang, src, units, notes }; błąd → CalcError.
-// vars i ans: { v, u, ang? } – wartość (w SI; kąt w trybie, w którym go policzono), jednostka i znacznik kąta
+// evaluate('v = 72 km/h', { vars, ans, angle }) → { assign, v, u, ang, mode, src, units, notes }; błąd → CalcError.
+// vars i ans: { v, u, ang?, mode? } – wartość (w SI; kąt w trybie `mode`, w którym go policzono), jednostka i znacznik kąta
 export function evaluate(raw, { vars = {}, ans = { v: 0, u: {} }, angle = 'deg' } = {}) {
   const ctx = { vars, ans, angle: angle === 'rad' ? 'rad' : 'deg' };
   const src = balance(raw);
@@ -970,5 +975,5 @@ export function evaluate(raw, { vars = {}, ans = { v: 0, u: {} }, angle = 'deg' 
   treeNotes(tree, ctx, notes);
   if (Number.isNaN(q.v)) throw err('Wynik nieokreślony');
   if (!Number.isFinite(q.v)) throw err('Wynik poza zakresem');
-  return { assign, v: noNegZero(q.v), u: q.u, ang: q.ang, src, units: unitLine(tree, vars, q), notes: [...notes] };
+  return { assign, v: noNegZero(q.v), u: q.u, ang: q.ang, mode: ctx.angle, src, units: unitLine(tree, vars, q), notes: [...notes] };
 }

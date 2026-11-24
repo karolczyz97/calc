@@ -706,6 +706,19 @@ test('kąt płaski w ewaluatorze zachowuje znacznik i nie psuje fizyki', () => {
   assert.ok(close(evaluate('2 m * x', { vars: { x: { v: 30, u: {} } } }).v, 60));        // bez znacznika: zwykła liczba
 });
 
+test('zapisany kąt przelicza się po zmianie trybu DEG/RAD', () => {
+  const x = evaluate('x = 30°', { angle: 'deg' });
+  assert.equal(x.mode, 'deg');
+  const vars = { x: { v: x.v, u: x.u, ang: x.ang, mode: x.mode } };
+  assert.ok(close(evaluate('2 m * x', { vars, angle: 'deg' }).v, Math.PI / 3));
+  assert.ok(close(evaluate('2 m * x', { vars, angle: 'rad' }).v, Math.PI / 3));          // 30° to wciąż π/6 rad
+  assert.ok(close(evaluate('sin(x)', { vars, angle: 'rad' }).v, 0.5));
+  assert.ok(close(evaluate('x', { vars, angle: 'rad' }).v, Math.PI / 6));
+  const y = evaluate('y = 1 rad', { angle: 'rad' });
+  assert.ok(close(evaluate('y', { vars: { y }, angle: 'deg' }).v, 180 / Math.PI));
+  assert.ok(close(evaluate('2 m * ans', { ans: { v: Math.PI / 6, u: {}, ang: true, mode: 'rad' }, angle: 'deg' }).v, Math.PI / 3));
+});
+
 test('kolejne obliczenia nie dzielą stanu (tryb kątów w kontekście, nie w module)', () => {
   assert.ok(close(evaluate('sin(30)', { angle: 'deg' }).v, 0.5));
   assert.ok(close(evaluate('sin(30)', { angle: 'rad' }).v, Math.sin(30)));
