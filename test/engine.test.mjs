@@ -94,15 +94,23 @@ const CASES = [
   [".5", "none", [0.5, ""]],
   ["5,", "none", { err: "Przecinek to część dziesiętna – argumenty oddzielaj średnikiem ;" }],
   ["5.", "none", { err: "Nieznany znak: ." }],
-  // dużych liczb nie dzielimy: ani kropką, ani przecinkiem, ani spacją (także wąską ze skopiowanego tekstu)
+  // dużych liczb nie dzielimy kropką ani przecinkiem; spacja (też twarda i wąska ze skopiowanego tekstu) grupuje po 3 cyfry
   ["1000000", "none", [1000000, ""]],
   ["1.000.000", "none", { err: COMMAS }],
   ["1,000,000", "none", { err: COMMAS }],
   ["max(1,2,3)", "none", { err: COMMAS }],
-  ["1 000", "none", { err: TWO }],
-  ["1\u202f000", "none", { err: TWO }],
-  ["384 400 km", "none", { err: TWO }],
-  ["6,626 070 15·10⁻³⁴ J·s", "none", { err: TWO }],
+  ["1 000", "none", [1000, ""]],
+  ["1 000", "none", [1000, ""]],
+  ["1 000 000", "none", [1000000, ""]],
+  ["1 234,567 89", "none", [1234.56789, ""]],
+  ["384 400 km", "none", [384400000, "m"]],
+  ["6,626 070 15·10⁻³⁴ J·s", "none", [6.62607015e-34, "kg·m²/s"]],
+  ["1 000 + 2 000", "none", [3000, ""]],
+  ["max(1 000; 2)", "none", [1000, ""]],
+  ["1 0000", "none", { err: TWO }],
+  ["12 34", "none", { err: TWO }],
+  ["1 000 00", "none", { err: TWO }],
+  ["2,5 300", "none", { err: TWO }],
   ["2 3", "none", { err: TWO }],
   ["2,5 3", "none", { err: TWO }],
   ["2 1/2", "none", { err: TWO }],
@@ -260,6 +268,32 @@ const CASES = [
   ["5 mrad", "none", [0.286478897565, ""]],
   ["1,5·10^-3 rad", "none", [0.0859436692696, ""]],
   ["2 rad/s", "none", [2, "Hz"]],                        // prędkość kątowa zostaje bez przeliczania
+  ["2 rad / 1 s", "none", [2, "Hz"]],                    // kąt przez wielkość z jednostką: radiany SI także w trybie DEG
+  ["2 rad / 1 s", "rad", [2, "Hz"]],
+  ["2 rad * 0,5 m", "none", [1, "m"]],                   // długość łuku
+  ["90° * 2 m", "none", [Math.PI, "m"]],
+  ["1 m / 2 rad", "none", [0.5, "m"]],
+  ["arcsin(0,5) * 2 m", "none", [Math.PI / 3, "m"]],
+  ["2 * 30°", "none", [60, ""]],
+  ["30° / 2", "none", [15, ""]],
+  ["180° / 30°", "none", [6, ""]],                       // kąt przez kąt to stosunek
+  ["pi / 30°", "none", [0.104719755120, ""]],
+  ["sin(2 * 30°)", "none", [0.866025403784, ""]],
+  ["sin 2π", "rad", [0, ""]],                            // funkcja bez nawiasu bierze cały iloczyn bez znaku
+  ["sin 30 * 2", "none", [1, ""]],
+  ["ln 2e", "none", [1.69314718056, ""]],
+  ["1/2π", "none", [0.159154943092, "", 1]],             // mnożenie bez znaku wiąże mocniej niż /
+  ["1/(2π)", "none", [0.159154943092, ""]],
+  ["(1/2)π", "none", [1.57079632679, ""]],
+  ["(1/2)*π", "none", [1.57079632679, ""]],
+  ["2π/3", "none", [2.09439510239, ""]],
+  ["1/2 sin 30", "none", [1, "", 1]],
+  ["(2 + 3) m", "none", [5, "m"]],                       // jednostka po nawiasie
+  ["sqrt(2) m", "none", [1.41421356237, "m"]],
+  ["(1/2) km", "none", [500, "m"]],
+  ["(2*pi) h", "none", [4.16328266108e-33, "kg·m²/s"]],  // h po nawiasie to stała Plancka
+  ["(2*pi) g", "none", [61.6380478634, "m/s²"]],
+  ["(2 + 3) kg/m^3", "none", [5, "kg/m³"]],
   ["sin(pi/6)", "none", [0.00913839539718, "", 1]],      // notka: π w trybie DEG
   ["sin(pi/6)", "rad", [0.5, ""]],
   ["sin(30)*pi", "none", [1.57079632679, ""]],
@@ -420,18 +454,22 @@ const CASES = [
   ["rhoCu*50 m/2,5 mm^2", "none", [0.336, "Ω"]],
   ["rhoCu*50 m/(2,5 mm^2)", "none", [0.336, "Ω"]],
   ["400 V*sqrt(3)*16 A", "none", [11085.1251684, "W"]],
-  ["200 g", "none", [1962, "m/s²", 1]],
-  ["2g", "none", [19.62, "m/s²", 1]],
-  ["2 g", "none", [19.62, "m/s²", 1]],
+  ["200 g", "none", [0.2, "kg", 1]],                      // g za liczbą to gram
+  ["2g", "none", [0.002, "kg", 1]],
+  ["2 g", "none", [0.002, "kg", 1]],
+  ["4,19 J/(g·K)", "none", [4190, "m²/(s²·K)", 1]],
+  ["4,19 J/(K·g)", "none", [4190, "m²/(s²·K)", 1]],
   ["500 mg", "none", [0.0005, "kg"]],
   ["5 kg*g", "none", [49.05, "N"]],
   ["5 kg * g", "none", [49.05, "N"]],
-  ["m = 200 g", "none", [1962, "m/s²", 1]],
+  ["m = 200 g", "none", [0.2, "kg", 1]],
+  ["2*g", "none", [19.62, "m/s²"]],
   ["20 °C", "none", { err: "°C i °F nie są obsługiwane – temperaturę podaj w kelwinach, np. 20 K + T0" }],
   ["x = 3 m", "none", [3, "m"]],
   ["2 x", "none", { err: "Nieznana nazwa: x" }],
   ["2x", "none", { err: "Nieznana nazwa: x" }],
   ["h = 10 m", "vars", [10, "m", 1]],
+  ["(2 + 3) m", "vars", [10, "kg"]],                     // zmienna po nawiasie to zmienna
   ["20 m/s", "vars", [20, "m/s", 2]],
   ["5 s", "vars", [5, "s", 1]],
   ["3m", "vars", [3, "m", 1]],                          // litery za liczbą to jednostka, także sklejone
@@ -523,7 +561,11 @@ test('notki o odczytaniu zapisu', () => {
   assert.deepEqual(evaluate('3m', { vars: VARS }).notes, ['„m” to tu jednostka, nie zmienna m (zmienna: 2*m)']);
   assert.deepEqual(evaluate('2 m2', { vars: VARS }).notes, ['„m2” to tu jednostka, nie zmienna m2 (zmienna: 2*m2)']);
   assert.deepEqual(evaluate('10 m', { vars: VARS }).notes, ['„m” to tu jednostka, nie zmienna m (zmienna: 2*m)']);
-  assert.deepEqual(evaluate('200 g').notes, ['„g” to przyspieszenie ziemskie, nie gram (masę wpisz w kg, np. 0,25 kg)']);
+  assert.deepEqual(evaluate('200 g').notes, ['„g” za liczbą to gram – przyspieszenie ziemskie mnóż jawnie: 2*g']);
+  assert.deepEqual(evaluate('1/2π').notes, ['„a/b c” policzono jako a/(b·c) – aby pomnożyć ułamek, użyj znaku *: (a/b)*c']);
+  assert.deepEqual(evaluate('1/(2π)').notes, []);
+  assert.deepEqual(evaluate('(1/2)*π').notes, []);
+  assert.deepEqual(evaluate('2π/3').notes, []);
   assert.deepEqual(evaluate('72 km/h').notes, []);
   assert.deepEqual(evaluate('round(1,5 cm; 1)').notes, ['round zaokrągla w jednostkach SI (m), nie w cm']);
   assert.deepEqual(evaluate('round(2,345 m; 2)').notes, []);
@@ -646,4 +688,33 @@ test('tona przyjmuje tylko kt, Mt, Gt – ft, ct, at, pt to nie pikotony', () =>
 test('dokładny zapis tuż pod granicą liczb nie staje się Infinity', () => {
   assert.equal(exactText(Number.MAX_VALUE), '1,7976931348623157e+308');
   assert.equal(evaluate(insertText(Number.MAX_VALUE, {})).v, Number.MAX_VALUE);
+});
+
+test('kąt płaski w ewaluatorze zachowuje znacznik i nie psuje fizyki', () => {
+  assert.equal(evaluate('30°').ang, true);
+  assert.equal(evaluate('2 rad').ang, true);
+  assert.equal(evaluate('2 * 30°').ang, true);
+  assert.equal(evaluate('180° / 30°').ang, false);
+  assert.equal(evaluate('2 rad / 1 s').ang, false);
+  assert.equal(evaluate('arcsin(1)').ang, true);
+  assert.equal(evaluate('2 + 3').ang, false);
+  // zmienna i ans pamiętają, że są kątem
+  const x = evaluate('x = 30°');
+  const vars = { x: { v: x.v, u: x.u, ang: x.ang } };
+  assert.ok(close(evaluate('2 m * x', { vars }).v, Math.PI / 3));
+  assert.ok(close(evaluate('2 m * ans', { ans: { v: 30, u: {}, ang: true } }).v, Math.PI / 3));
+  assert.ok(close(evaluate('2 m * x', { vars: { x: { v: 30, u: {} } } }).v, 60));        // bez znacznika: zwykła liczba
+});
+
+test('kolejne obliczenia nie dzielą stanu (tryb kątów w kontekście, nie w module)', () => {
+  assert.ok(close(evaluate('sin(30)', { angle: 'deg' }).v, 0.5));
+  assert.ok(close(evaluate('sin(30)', { angle: 'rad' }).v, Math.sin(30)));
+  assert.ok(close(evaluate('sin(30)', { angle: 'deg' }).v, 0.5));
+  assert.ok(close(evaluate('sin(30)').v, 0.5));
+});
+
+test('wynik nie jest −0', () => {
+  for (const src of ['round(-123; -310)', 'round(-0,4)', 'round(-0,004; 1)', '-0', '0*-5', 'round(-4; -1)']) {
+    assert.equal(evaluate(src).v, 0, src);   // assert.equal (Object.is) odróżnia −0 od 0
+  }
 });

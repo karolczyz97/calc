@@ -1,7 +1,7 @@
 import globals from 'globals';
 
 export default [
-  { ignores: ['node_modules/**'] },
+  { ignores: ['lib/**', 'node_modules/**'] },
   {
     files: ['**/*.{js,mjs}'],
     languageOptions: { globals: { ...globals.browser, ...globals.serviceworker } },

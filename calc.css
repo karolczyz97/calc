@@ -1,8 +1,7 @@
 /* calc.css – Style kalkulatora naukowego (działa samodzielnie oraz jako komponent w DarkPDF) */
 
 /* Motyw działa tylko wewnątrz .calc-root – na stronie czytnika nic nie przecieka.
-   Samodzielnie: tryb i paleta z atrybutów data-mode / data-palette na <html>.
-   W DarkPDF: z klas .dark / .gemini, które ustawia czytnik. */
+   Tryb i paleta z atrybutów data-mode / data-palette na <html> – ustawia je kalkulator (samodzielnie) albo czytnik DarkPDF. */
 .calc-root {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: dark;
@@ -24,16 +23,14 @@
 }
 
 /* Jasny */
-html[data-mode="light"] .calc-root,
-html:not(.dark) .calc-root.is-embedded {
+html[data-mode="light"] .calc-root {
   color-scheme: light;
   --calc-err: #d93025;
   --calc-shadow: 0 1px 3px rgba(60, 64, 67, .15);
 }
 
 /* Gemini – kolory ze wspólnej palety darkpdf/theme.css (ciemna albo jasna, zależnie od trybu) */
-html[data-palette="gemini"] .calc-root,
-html.gemini .calc-root.is-embedded {
+html[data-palette="gemini"] .calc-root {
   --calc-bg: var(--gem-bg, #0f0f0f);
   --calc-panel: var(--gem-bg, #0f0f0f);
   --calc-key: var(--gem-hover, #282a2c);
@@ -49,6 +46,24 @@ html.gemini .calc-root.is-embedded {
   --calc-eq-line: var(--gem-accent-line, #3b5a8c);
   --calc-err: var(--gem-err, #f2b8b5);
   font-family: var(--gem-font, system-ui, sans-serif);
+}
+
+/* Jasne Gemini z własnymi wartościami zapasowymi: kalkulator uruchomiony bez ../darkpdf/theme.css też jest jasny */
+html[data-mode="light"][data-palette="gemini"] .calc-root {
+  --calc-bg: var(--gem-bg, #ffffff);
+  --calc-panel: var(--gem-bg, #ffffff);
+  --calc-key: var(--gem-hover, #e1e6ec);
+  --calc-key-hi: var(--gem-hover-2, #d3dbe5);
+  --calc-key-fn: var(--gem-fill-2, #f0f4f9);
+  --calc-field: var(--gem-menu, #f0f4f9);
+  --calc-text: var(--gem-text, #1f1f1f);
+  --calc-muted: var(--gem-text-muted, #444746);
+  --calc-faint: var(--gem-text-dim, #5f6368);
+  --calc-line: var(--gem-line, #e1e3e1);
+  --calc-eq-bg: var(--gem-accent-bg, #d3e3fd);
+  --calc-eq-text: var(--gem-accent, #0b57d0);
+  --calc-eq-line: var(--gem-accent-line, #a8c7fa);
+  --calc-err: var(--gem-err, #b3261e);
 }
 
 /* ---- Główny kontener kalkulatora ---- */
@@ -116,7 +131,7 @@ html.gemini .calc-root.is-embedded {
 
 /* Wąski kontener / boczny pasek: jedna kolumna. minmax(0, 1fr) zamiast 1fr, żeby kolumna mogła być węższa
    niż treść (lista stałych bez zawijania wymuszała ~330 px i wypychała wszystko poza panel) */
-@container (max-width: 680px) {
+@container (max-width: 780px) {
   .calc-root .calc-main {
     grid-template-columns: minmax(0, 1fr);
     padding: 10px 12px;
@@ -124,7 +139,7 @@ html.gemini .calc-root.is-embedded {
   }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 780px) {
   .calc-root .calc-main {
     grid-template-columns: minmax(0, 1fr);
     padding: 10px;
@@ -166,6 +181,9 @@ html.gemini .calc-root.is-embedded {
 .calc-root .seg {
   display: flex;
   gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--calc-field);
 }
 
 .calc-root .seg button {
@@ -220,6 +238,9 @@ html.gemini .calc-root.is-embedded {
   padding: 12px 16px;
   font-size: 20px;
   line-height: 28px;
+  margin: 0;
+  font-kerning: none;
+  font-variant-ligatures: none;
   border: 0;
   border-radius: var(--gem-radius-field, 24px);
 }
@@ -232,7 +253,8 @@ html.gemini .calc-root.is-embedded {
 }
 
 .calc-root .calc-expr:focus {
-  box-shadow: inset 0 0 0 1px var(--calc-eq-text);
+  background: var(--calc-key-fn);
+  box-shadow: inset 0 0 0 1px var(--calc-eq-line);
 }
 
 .calc-root .calc-ghost {
@@ -263,6 +285,7 @@ html.gemini .calc-root.is-embedded {
 }
 
 .calc-root .calc-preview {
+  font-variant-numeric: tabular-nums;
   min-height: 20px;
   margin-top: 6px;
   color: var(--calc-muted);
@@ -303,8 +326,37 @@ html.gemini .calc-root.is-embedded {
   font-size: clamp(26px, 8cqi, 34px);
   line-height: 1.2;
   overflow-wrap: anywhere;
-  cursor: copy;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
   border-radius: var(--gem-radius-item, 12px);
+}
+
+.calc-root .calc-result-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.calc-root .calc-result-row .calc-result {
+  flex: 1;
+  min-width: 0;
+}
+
+.calc-root .copy-btn {
+  flex: none;
+  margin-top: 4px;
+  padding: 6px;
+  border-radius: 50%;
+  color: var(--calc-faint);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calc-root .copy-btn:hover {
+  background: var(--calc-key-hi);
+  color: var(--calc-text);
 }
 .calc-root .calc-result:focus-visible { outline: 2px solid var(--calc-eq-text); outline-offset: 3px; }
 
@@ -386,6 +438,14 @@ html.gemini .calc-root.is-embedded {
 }
 
 /* ---- Klawiatura ---- */
+.calc-root :is(.keys, .hist) {
+  margin-top: 14px;
+}
+
+.calc-root.is-embedded :is(.keys, .hist) {
+  margin-top: 8px;
+}
+
 .calc-root .keys {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -510,6 +570,7 @@ html.gemini .calc-root.is-embedded {
 }
 
 .calc-root .hist li .r {
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
   text-align: right;
   white-space: nowrap;
@@ -554,8 +615,8 @@ html.gemini .calc-root.is-embedded {
 }
 
 .calc-root .calc-search:focus {
-  background: var(--calc-key);
-  box-shadow: 0 0 0 1px var(--calc-eq-text);
+  background: var(--calc-key-fn);
+  box-shadow: inset 0 0 0 1px var(--calc-eq-line);
 }
 
 .calc-root .calc-search::placeholder {
@@ -604,7 +665,7 @@ html.gemini .calc-root.is-embedded {
 .calc-root .row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
   text-align: left;
   padding: 8px 12px;
@@ -646,6 +707,7 @@ html.gemini .calc-root.is-embedded {
 }
 
 .calc-root .row .bottom {
+  font-variant-numeric: tabular-nums;
   flex: none;
   font-size: 11.5px;
   color: var(--calc-muted);

@@ -1,13 +1,16 @@
 // calc-app.js – interfejs kalkulatora naukowego (samodzielna strona i panel w DarkPDF).
 // Obliczenia, jednostki i formatowanie liczb są w calc-engine.js.
 
-import { CalcError, CONSTS, CONST, evaluate, complete, stripAssign, fmt, toFraction, exactText, unitLabel, insertText, copyText } from './calc-engine.js';
+import { CalcError, CONSTS, CONST, evaluate, complete, stripAssign, fmt, toFraction, exactText, unitLabel, insertText, copyText, isFunction } from './calc-engine.js';
 
 const GROUPS_CLOSED = [...new Set(CONSTS.map((c) => c[5]))].slice(1);   // na start otwarte tylko „Podstawowe”
 const MODES = ['dark', 'light', 'auto'];
 const SIGS = ['auto', '2', '3', '4', '5'];
 const HIST_MAX = 100;
 const OP_START = /^[+×÷*/^!%]/;   // działanie bez pierwszej liczby: +2 → ans+2
+const NEEDS_PARENS = /^-|[\s/*]/;  // wynik wstawiany do działania: -5, 20 m/s, 6,02e+23 1/mol
+// Człon tuż przed kursorem, który potęga ma objąć w całości: liczba ujemna (−5) albo liczba z jednostką (20 m/s)
+const POW_BASE = /(?:^|[(+×÷*/^=;])\s*([-−]\d[\d.,]*(?:[eE][+-]?\d+)?|\d[\d.,]*(?:[eE][+-]?\d+)?\s*[A-Za-zΩμµ][A-Za-zΩμµ0-9²³⁴⁻¹⁰^]*(?:[/·][A-Za-zΩμµ][A-Za-zΩμµ0-9²³⁴⁻¹⁰^]*)*)$/;
 
 const isObj = (x) => typeof x === 'object' && x !== null && !Array.isArray(x);
 const oneOf = (v, list, d) => (list.includes(v) ? v : d);
@@ -17,6 +20,7 @@ const MODE_ICON = {
   light: icon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/>'),
   auto: icon('<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor"/>')
 };
+const COPY_ICON = icon('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>');
 const PALETTE_ICON = {
   gemini: icon('<path d="M12 3c1.4 5.2 3.8 7.6 9 9-5.2 1.4-7.6 3.8-9 9-1.4-5.2-3.8-7.6-9-9 5.2-1.4 7.6-3.8 9-9Z"/>'),
   system: icon('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>')
@@ -31,7 +35,7 @@ function loadVars(raw) {
   const out = Object.create(null);          // bez prototypu: zmienna „constructor” to zwykła nazwa
   if (!isObj(raw)) return out;
   for (const [name, val] of Object.entries(raw)) {
-    if (isObj(val) && Number.isFinite(val.v)) out[name] = { v: val.v, u: siUnit(val.u) };
+    if (isObj(val) && Number.isFinite(val.v)) out[name] = { v: val.v, u: siUnit(val.u), ang: val.ang === true };
   }
   return out;
 }
@@ -39,7 +43,7 @@ function loadVars(raw) {
 function loadHist(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.filter((h) => isObj(h) && typeof h.e === 'string' && Number.isFinite(h.v))
-    .map((h) => ({ e: h.e, v: h.v, u: siUnit(h.u), units: unitTrace(h.units) }))
+    .map((h) => ({ e: h.e, v: h.v, u: siUnit(h.u), ang: h.ang === true, units: unitTrace(h.units) }))
     .slice(0, HIST_MAX);
 }
 
@@ -52,12 +56,34 @@ function fracHtml(f) {
   return html;
 }
 
+// KaTeX leży w lib/katex obok tego pliku (działa offline). Ładujemy go leniwie, raz na stronę;
+// bez niego ślad jednostek jest zwykłym tekstem.
+let katexPromise = null;
+function ensureKatex() {
+  if (typeof window === 'undefined') return Promise.resolve(false);
+  if (window.katex) return Promise.resolve(true);
+  return katexPromise ??= new Promise((resolve) => {
+    const base = new URL('./lib/katex/', import.meta.url).href;
+    if (!document.querySelector('link[data-katex]')) {
+      const link = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: base + 'katex.min.css' });
+      link.dataset.katex = '';
+      document.head.append(link);
+    }
+    const script = Object.assign(document.createElement('script'), { src: base + 'katex.min.js', async: true });
+    script.onload = () => resolve(true);
+    script.onerror = () => { script.remove(); katexPromise = null; resolve(false); };
+    document.head.append(script);
+  });
+}
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const norm = (s) => s.toLowerCase().replace(/ł/g, 'l').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 // ================= Montowanie komponentu kalkulatora =================
 export function mountCalculator(container, options = {}) {
   const isEmbedded = Boolean(options.isEmbedded);
+  const ac = new AbortController();           // zdarzenia na document i matchMedia znikają razem z destroy()
+  const { signal } = ac;
 
   // Bezpieczny magazyn pamięci lokalnej
   const store = {
@@ -69,7 +95,8 @@ export function mountCalculator(container, options = {}) {
   let sig = oneOf(String(store.get('sig', 'auto')), SIGS, 'auto');
   let vars = loadVars(store.get('vars', {}));
   let hist = loadHist(store.get('hist', []));
-  let ans = hist.length ? { v: hist[0].v, u: hist[0].u } : { v: 0, u: {} };
+  const emptyAns = () => ({ v: 0, u: {}, ang: false });
+  let ans = hist.length ? { v: hist[0].v, u: hist[0].u, ang: hist[0].ang } : emptyAns();
   let histPos = -1;                 // który wpis historii jest w polu (↑ ↓); -1 = własne działanie
   let draft = '';                   // własne działanie sprzed pierwszego ↑
   const closedRaw = store.get('closedGroups', GROUPS_CLOSED);
@@ -112,13 +139,16 @@ export function mountCalculator(container, options = {}) {
           </div>
           <div id="calc-preview" class="calc-preview mono"></div>
           <div id="calc-last-expr" class="calc-last-expr mono"></div>
-          <div id="calc-result" class="calc-result mono" role="button" tabindex="0" aria-live="polite" aria-describedby="calc-result-help" title="Kliknij lub Enter, żeby wstawić · dwuklik lub Ctrl+C kopiuje">0</div>
+          <div class="calc-result-row">
+            <div id="calc-result" class="calc-result mono" role="button" tabindex="0" aria-live="polite" aria-describedby="calc-result-help" title="Kliknij lub Enter, żeby wstawić · Ctrl+C kopiuje">0</div>
+            <button id="calc-copy" class="icon copy-btn" type="button" aria-label="Kopiuj wynik" title="Kopiuj wynik">${COPY_ICON}</button>
+          </div>
           <div id="calc-unit-track" class="calc-unit-track mono"></div>
           <div id="calc-result-raw" class="calc-result-raw mono"></div>
-          <span id="calc-result-help" hidden>Enter wstawia wynik do działania, Ctrl+C lub Command+C kopiuje</span>
+          <span id="calc-result-help" hidden>Enter wstawia wynik do działania, Ctrl+C lub Command+C albo przycisk obok kopiuje</span>
         </div>
 
-        <div class="panel keys" id="calc-keys" style="margin-top:14px">
+        <div class="panel keys" id="calc-keys">
           <button class="fn" data-i="sin(">sin</button>
           <button class="fn" data-i="cos(">cos</button>
           <button class="fn" data-i="tg(">tg</button>
@@ -147,7 +177,7 @@ export function mountCalculator(container, options = {}) {
           <button class="eq" data-a="run" title="Oblicz (Enter)">=</button>
         </div>
 
-        <div class="panel hist" style="margin-top:14px">
+        <div class="panel hist">
           <h2>Historia <button id="calc-clear-hist">wyczyść</button></h2>
           <ol id="calc-hist"></ol>
           <div class="empty" id="calc-hist-empty">Tu pojawią się obliczenia. Kliknij wynik, żeby wstawić go do wyrażenia.</div>
@@ -178,6 +208,7 @@ export function mountCalculator(container, options = {}) {
   const expr = container.querySelector('#calc-expr');
   const preview = container.querySelector('#calc-preview');
   const result = container.querySelector('#calc-result');
+  const copyBtn = container.querySelector('#calc-copy');
   const resultRaw = container.querySelector('#calc-result-raw');
   const lastExpr = container.querySelector('#calc-last-expr');
   const unitTrack = container.querySelector('#calc-unit-track');
@@ -272,12 +303,34 @@ export function mountCalculator(container, options = {}) {
     insert(text);
   }
 
+  // Wynik z minusem albo jednostką (-5, 20 m/s) obok innych znaków dostaje nawias: 3×-5 i 2^20 m/s to co innego
+  function insertResult(text) {
+    insertValue(expr.value.trim() && NEEDS_PARENS.test(text) ? `(${text})` : text);
+  }
+
+  // x² i xʸ po liczbie ujemnej albo z jednostką potęgują całość: −5 → (−5)^2, 20 m/s → (20 m/s)^2.
+  // „2 v” przy zmiennej v zostaje: tylko człon, który sam w sobie ma jednostkę, jest zamykany w nawiasie.
+  function wrapPowerBase() {
+    const [s, e] = selection();
+    if (s !== e) return;
+    const before = expr.value.slice(0, s);
+    const base = POW_BASE.exec(before)?.[1];
+    if (!base) return;
+    if (!/^[-−]/.test(base)) {
+      try { if (!unitLabel(evaluate(base).u)) return; } catch { return; }
+    }
+    const start = s - base.length;
+    setExpr(`${expr.value.slice(0, start)}(${base})${expr.value.slice(s)}`, s + 2);
+  }
+
   function backspace() {
     const [s, e] = selection();
     if (s !== e) setExpr(expr.value.slice(0, s) + expr.value.slice(e), s);
     else if (s > 0) {
-      const m = /[A-Za-z√]+\($|.$/u.exec(expr.value.slice(0, s));   // „sin(” znika w całości
-      const cut = m ? m[0].length : 1;
+      const before = expr.value.slice(0, s);
+      const fn = /([A-Za-z]+\d*)\($/.exec(before);   // „sin(”, „log10(”, „√(” znikają w całości, a zmienna x1( nie
+      const cut = fn && isFunction(fn[1]) && !(fn[1] in vars) ? fn[0].length
+        : before.endsWith('√(') ? 2 : ([...before].at(-1)?.length ?? 1);
       setExpr(expr.value.slice(0, s - cut) + expr.value.slice(s), s - cut);
     }
   }
@@ -351,17 +404,17 @@ export function mountCalculator(container, options = {}) {
     const src = expr.value.trim();
     if (!src) return;
     try {
-      const { assign, v, u, src: full, units, notes } = calc(src);
+      const { assign, v, u, ang, src: full, units, notes } = calc(src);
       if (assign) {
-        vars[assign] = { v, u };
+        vars[assign] = { v, u, ang };
         store.set('vars', vars);
         renderVars();
       }
-      ans = { v, u };
+      ans = { v, u, ang };
       // To samo działanie drugi raz z rzędu (↑ i Enter, odświeżenie strony z ?expr=) nie dubluje historii
       const repeated = hist[0] && hist[0].e === full && hist[0].v === v && unitLabel(hist[0].u) === unitLabel(u);
       if (!repeated) {
-        hist.unshift({ e: full, v, u, units });
+        hist.unshift({ e: full, v, u, ang, units });
         hist = hist.slice(0, HIST_MAX);
         store.set('hist', hist);
       }
@@ -397,7 +450,7 @@ export function mountCalculator(container, options = {}) {
       e.onclick = (ev) => { ev?.stopPropagation?.(); insertExpr(h.e); };
       r.innerHTML = '= ' + withUnit(fmt(h.v, sig).html, h.u);
       r.title = 'Wstaw wynik w miejsce kursora';
-      r.onclick = (ev) => { ev?.stopPropagation?.(); insertValue(insertText(h.v, h.u)); };
+      r.onclick = (ev) => { ev?.stopPropagation?.(); insertResult(insertText(h.v, h.u)); };
       if (h.units) {
         const sub = document.createElement('div');
         sub.className = 'unit-sub mono';
@@ -484,12 +537,21 @@ export function mountCalculator(container, options = {}) {
     }
   }
 
+  // Kolor paska przeglądarki = tło kalkulatora w bieżącym motywie (Gemini ciemny #0f0f0f, jasny #ffffff)
+  function themeColor(dark) {
+    const bg = getComputedStyle(container).backgroundColor;
+    const m = bg.match(/[\d.]+/g);
+    if (!m || m.length < 3 || (m.length > 3 && Number(m[3]) === 0)) return dark ? '#0f0f0f' : '#ffffff';
+    const scale = bg.startsWith('color(') ? 255 : 1;
+    return '#' + m.slice(0, 3).map((x) => Math.round(Number(x) * scale).toString(16).padStart(2, '0')).join('');
+  }
+
   function applyStandaloneTheme() {
     if (isEmbedded) return;
     const dark = colorMode === 'auto' ? systemDark.matches : colorMode === 'dark';
     document.documentElement.setAttribute('data-mode', dark ? 'dark' : 'light');
     document.documentElement.setAttribute('data-palette', palette);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#131314' : '#ffffff');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor(dark));
     modeBtn.innerHTML = MODE_ICON[colorMode];
     modeBtn.title = `Tryb: ${MODE_NAME[colorMode]} – kliknij: ciemny / jasny / auto (Ctrl+M)`;
     paletteBtn.innerHTML = PALETTE_ICON[palette];
@@ -558,6 +620,7 @@ export function mountCalculator(container, options = {}) {
     if (b.dataset.i !== undefined) {
       let t = b.dataset.i;
       if (t === '=') t = expr.value.includes('=') ? '' : ' = ';
+      if (t.startsWith('^')) wrapPowerBase();
       insert(t);
       return;
     }
@@ -589,33 +652,40 @@ export function mountCalculator(container, options = {}) {
   if (!isEmbedded) {
     modeBtn.addEventListener('click', cycleMode);
     paletteBtn.addEventListener('click', togglePalette);
-    systemDark.addEventListener('change', () => { if (colorMode === 'auto') applyStandaloneTheme(); });
+    systemDark.addEventListener('change', () => { if (colorMode === 'auto') applyStandaloneTheme(); }, { signal });
   } else {
     container.addEventListener('click', (e) => e.stopPropagation());
   }
 
   searchEl.addEventListener('input', renderConsts);
-  clearHistBtn.addEventListener('click', (e) => { e.stopPropagation(); hist = []; store.set('hist', hist); renderHist(); });
+  // Esc: najpierw czyści szukanie, potem wraca do działania (na dotyku tylko zwalnia pole) – i nie zamyka panelu w DarkPDF
+  searchEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (searchEl.value !== '') { searchEl.value = ''; renderConsts(); }
+    else if (fine) expr.focus();
+    else searchEl.blur();
+  });
+  clearHistBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hist = [];
+    ans = emptyAns();                 // „ans” nie podaje wyniku z wyczyszczonej historii
+    histPos = -1;
+    store.set('hist', hist);
+    renderHist();
+  });
   clearVarsBtn.addEventListener('click', (e) => { e.stopPropagation(); vars = Object.create(null); store.set('vars', vars); renderVars(); livePreview(); });
 
-  let resultClickTimer = null;
-  result.addEventListener('click', () => {
-    if (!result.dataset.copy || resultClickTimer) return;
-    resultClickTimer = setTimeout(() => {
-      resultClickTimer = null;
-      insertValue(result.dataset.insert);
-    }, 220);
-  });
+  result.addEventListener('click', () => { if (result.dataset.insert) insertResult(result.dataset.insert); });
 
   async function copyResult() {
-    clearTimeout(resultClickTimer);
-    resultClickTimer = null;
     const t = result.dataset.copy;
     if (!t) return;
     try { await navigator.clipboard.writeText(t); flash('Skopiowano: ' + t); }
     catch { flash('Nie udało się skopiować – schowek jest tu niedostępny'); }   // np. strona bez https
   }
-  result.addEventListener('dblclick', copyResult);
+  copyBtn.addEventListener('click', copyResult);
   result.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
       e.preventDefault();
@@ -624,7 +694,7 @@ export function mountCalculator(container, options = {}) {
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       e.stopPropagation();
-      if (result.dataset.insert) insertValue(result.dataset.insert);
+      if (result.dataset.insert) insertResult(result.dataset.insert);
     }
   });
 
@@ -641,14 +711,17 @@ export function mountCalculator(container, options = {}) {
       expr.focus();
     }
   };
-  document.addEventListener('keydown', onDocKeyDown);
+  document.addEventListener('keydown', onDocKeyDown, { signal });
+  // Podpowiedź znika w tej samej klatce, w której kursor odchodzi od końca (przytrzymane ←)
+  document.addEventListener('selectionchange', () => { if (document.activeElement === expr) updateGhost(); }, { signal });
 
-  // Re-renderowanie KaTeX po załadowaniu
-  window.onKatexLoaded = () => {
+  // Wzory jednostek rysujemy od nowa, gdy KaTeX się wczyta
+  ensureKatex().then((ok) => {
+    if (!ok || signal.aborted) return;
     livePreview();
     showResult();
     renderHist();
-  };
+  });
 
   // Inicjalizacja widoku
   applyStandaloneTheme();
@@ -659,6 +732,10 @@ export function mountCalculator(container, options = {}) {
   showResult();
 
   return {
+    destroy() {
+      clearTimeout(hintTimer);
+      ac.abort();
+    },
     focus() { expr.focus(); },
     run(expression) {
       if (expression) expr.value = expression;

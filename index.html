@@ -4,15 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#131314">
+<meta name="theme-color" content="#0f0f0f">
 <title>Kalkulator naukowy</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<!-- KaTeX: ślad jednostek w drugiej linii wyniku -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous">
-<!-- async, nie defer: moduł kalkulatora nie czeka na CDN (bez KaTeX ślad jednostek jest zwykłym tekstem) -->
-<script async src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous" onload="window.onKatexLoaded && window.onKatexLoaded()"></script>
+<!-- KaTeX (ślad jednostek) ładuje calc-app.js z lib/katex – lokalnie, więc działa offline -->
 <!-- Wspólna paleta Gemini z repo darkpdf (na GitHub Pages i w server.js leży obok: /darkpdf/) -->
 <link rel="stylesheet" href="../darkpdf/theme.css">
 <link rel="stylesheet" href="calc.css">

@@ -128,17 +128,25 @@ function readExp(src, j) {
   return null;
 }
 
-const NOTE_G = '„g” to przyspieszenie ziemskie, nie gram (masę wpisz w kg, np. 0,25 kg)';
+const NOTE_G = '„g” za liczbą to gram – przyspieszenie ziemskie mnóż jawnie: 2*g';
+
+// Stała, której symbol jest też jednostką o innym znaczeniu (h: Planck / godzina, g: przyspieszenie / gram).
+// u, bar, atm, au… znaczą to samo jako stała i jednostka – to nie kolizja.
+const clashesWithUnit = (sym) => {
+  const unit = has(CONST, sym) && plainUnit(sym);
+  return Boolean(unit) && (!uEq(CONST[sym].u, unit.u) || Math.abs(CONST[sym].value / unit.f - 1) > 1e-9);
+};
 
 // Jeden składnik jednostki: symbol z wykładnikiem (m, km, s², m^-1, mm2 = mm²) albo nawias „(kg·K)”.
 // Zasada: litery za liczbą to jednostka (10 m, 72 km/h, 3m); zmienne i stałe mnoży się jawnie: 3*m, 2*MS.
 // W tekście użytkownika (ctx) słowo jest jednak nazwą – pierwsza pasująca reguła wygrywa:
 //  1. nie ma postaci jednostki: T0, m1, m_e (jednostka to całe słowo, najwyżej z wykładnikiem 2–9: m2, cm3)
-//  2. g – przyspieszenie ziemskie, nie gram (mg i kg to jednostki)
-//  3. funkcja z nawiasem: min(2; 3), a 60 min to minuty
-//  4. stała, która byłaby jednostką tylko z przedrostkiem: MS to masa Słońca, nie megasimens (też MK, cl, hbar)
+//  2. za nawiasem (opts.afterParen) zmienna i stała o nazwie jednostki to nazwa: (2*pi) h to stała Plancka
+//  3. g to gram tylko tuż za liczbą i w nawiasie jednostki (200 g, J/(g·K)); w „100 N / g” to przyspieszenie
+//  4. funkcja z nawiasem: min(2; 3), a 60 min to minuty
+//  5. stała, która byłaby jednostką tylko z przedrostkiem: MS to masa Słońca, nie megasimens (też MK, cl, hbar)
 // Zmienna o nazwie jednostki przegrywa z jednostką i dostaje notkę, jak ją zapisać.
-function unitTerm(src, j, ctx, first, notes) {
+function unitTerm(src, j, ctx, first, notes, opts) {
   if (src[j] === '(') return first ? null : unitGroup(src, j, ctx, notes);   // „5 (kg)” to zwykłe mnożenie
   const sym = SYM_RE.exec(src.slice(j))?.[0];
   const part = sym && unitOf(sym);
@@ -148,12 +156,13 @@ function unitTerm(src, j, ctx, first, notes) {
   if (word !== sym && !digitExp) return null;                                // 1.
   if (ctx) {
     const { vars } = ctx;
-    if (sym === 'g') {                                                        // 2.
-      if (first && !has(vars, 'g')) notes.push(NOTE_G);
-      return null;
+    if (opts.afterParen && (has(vars, word) || clashesWithUnit(sym))) return null;   // 2.
+    if (sym === 'g') {                                                        // 3.
+      if (!first && !opts.inGroup) return null;
+      if (!has(vars, 'g')) notes.push(NOTE_G);
     }
-    if (has(FUNCS, sym) && src[j + sym.length] === '(') return null;         // 3.
-    if (has(CONST, sym) && !plainUnit(sym)) return null;                      // 4.
+    if (has(FUNCS, sym) && src[j + sym.length] === '(') return null;         // 4.
+    if (has(CONST, sym) && !plainUnit(sym)) return null;                      // 5.
     if (has(vars, word)) notes.push(`„${word}” to tu jednostka, nie zmienna ${word} (zmienna: 2*${word})`);
   }
   const x = readExp(src, j + sym.length) ?? { e: digitExp ? +word[sym.length] : 1, len: digitExp ? 1 : 0 };
@@ -162,7 +171,7 @@ function unitTerm(src, j, ctx, first, notes) {
 
 function unitGroup(src, j, ctx, notes) {
   const inner = [];                                     // notki z nieudanej próby przepadają
-  const g = unitChain(src, skipWs(src, j + 1), ctx, inner);
+  const g = unitChain(src, skipWs(src, j + 1), ctx, inner, { inGroup: true });
   if (!g) return null;
   const k = skipWs(src, g.end) + 1;
   if (src[k - 1] !== ')') return null;
@@ -174,13 +183,13 @@ function unitGroup(src, j, ctx, notes) {
 
 // Ciąg składników połączonych * · / (albo zaczynający się od „1/”). Operator, za którym nie stoi
 // jednostka, zostaje w wyrażeniu: „100 N / g” to 100 N podzielone przez g.
-function unitChain(src, j, ctx, notes) {
+function unitChain(src, j, ctx, notes, opts = {}) {
   const acc = { u: {}, f: 1, num: [], den: [], end: j };
   let op = '*', n = 0;
   const one = /^1\s*\/\s*/.exec(src.slice(j));          // „1/mol”, „1/(m·s)”
   if (one) { op = '/'; j += one[0].length; }
   for (;;) {
-    const t = unitTerm(src, j, ctx, n === 0 && !one, notes);
+    const t = unitTerm(src, j, ctx, n === 0 && !one, notes, opts);
     if (!t) break;
     const div = op === '/';
     acc.u = uMul(acc.u, t.u, div ? -1 : 1);
@@ -206,10 +215,11 @@ function rawOf(num, den) {
 }
 
 // Jednostka od pozycji i → { u, f, raw, end } albo null.
-// ctx = null: napisy z tabel; ctx = { vars, notes }: tekst użytkownika (nazwy, zmienne, notki).
-function scanUnit(src, i, ctx) {
+// ctx = null: napisy z tabel; ctx = { vars, notes }: tekst użytkownika (nazwy, zmienne, notki);
+// opts.afterParen: jednostka stoi za nawiasem zamykającym, więc zmienne i stałe wygrywają z jednostką.
+function scanUnit(src, i, ctx, opts) {
   const notes = [];
-  const r = unitChain(src, skipWs(src, i), ctx, notes);
+  const r = unitChain(src, skipWs(src, i), ctx, notes, opts);
   if (ctx) for (const n of notes) ctx.notes.add(n);
   return r ? { u: r.u, f: r.f, raw: rawOf(r.num, r.den), end: r.end } : null;
 }
@@ -375,20 +385,22 @@ for (const [id, sym, name, value, unit, group, aliases = []] of CONSTS) {
 }
 
 // ================= Funkcje matematyczne =================
-let angleMode = 'deg';                  // ustawiane w evaluate() na czas jednego obliczenia
-const toRad = (x) => angleMode === 'deg' ? x * Math.PI / 180 : x;
-const fromRad = (x) => angleMode === 'deg' ? x * 180 / Math.PI : x;
-const quadrant = (x) => {
-  const q = angleMode === 'deg' ? x / 90 : x / (Math.PI / 2);
+// Funkcje kątowe dostają tryb ('deg' | 'rad') jako ostatni argument – silnik nie trzyma go w zmiennej modułu.
+const toRad = (x, angle) => angle === 'deg' ? x * Math.PI / 180 : x;
+const fromRad = (x, angle) => angle === 'deg' ? x * 180 / Math.PI : x;
+const quadrant = (x, angle) => {
+  const q = angle === 'deg' ? x / 90 : x / (Math.PI / 2);
   return Number.isSafeInteger(q) ? ((q % 4) + 4) % 4 : null;
 };
-const sin = (x) => { const q = quadrant(x); return q === null ? Math.sin(toRad(x)) : [0, 1, 0, -1][q]; };
-const cos = (x) => { const q = quadrant(x); return q === null ? Math.cos(toRad(x)) : [1, 0, -1, 0][q]; };
+const sin = (x, angle) => { const q = quadrant(x, angle); return q === null ? Math.sin(toRad(x, angle)) : [0, 1, 0, -1][q]; };
+const cos = (x, angle) => { const q = quadrant(x, angle); return q === null ? Math.cos(toRad(x, angle)) : [1, 0, -1, 0][q]; };
 const inUnit = (x, f) => { if (x < -1 || x > 1) throw err(`${f}: argument musi być z przedziału [−1; 1]`); return x; };
 const pos = (x, f) => { if (x <= 0) throw err(`${f}: argument musi być dodatni`); return x; };
 
-const tg = (x) => { if (cos(x) === 0) throw err('tg nieokreślony dla tego kąta'); return quadrant(x) === null ? Math.tan(toRad(x)) : 0; };
-const ctg = (x) => { if (sin(x) === 0) throw err('ctg nieokreślony dla tego kąta'); return cos(x) / sin(x); };
+const tg = (x, angle) => { if (cos(x, angle) === 0) throw err('tg nieokreślony dla tego kąta'); return quadrant(x, angle) === null ? Math.tan(toRad(x, angle)) : 0; };
+const ctg = (x, angle) => { if (sin(x, angle) === 0) throw err('ctg nieokreślony dla tego kąta'); return cos(x, angle) / sin(x, angle); };
+
+const noNegZero = (x) => (x === 0 ? 0 : x);   // −0 wyglądałby jak „-0” i różnił się od 0 w porównaniach
 
 // Zaokrąglenie „jak na kalkulatorze”: połówki od zera (2,5 → 3, −2,5 → −3), a 1,005 → 1,01,
 // chociaż w zapisie binarnym 1,005 to 1,00499… (poprawka o jeden najmniejszy krok liczby)
@@ -398,20 +410,22 @@ function roundTo(x, n = 0) {
   const [mantissa, exponent] = Math.abs(x).toExponential().split('e');
   const shifted = Number(exponent) + n;
   if (shifted > 15) return x;       // dokładność Number nie pozwala już zmienić tej liczby
-  if (shifted < -1) return Math.sign(x) * 0;
+  if (shifted < -1) return 0;
   const rounded = Math.round(Number(`${mantissa}e${shifted}`) * (1 + Number.EPSILON));
-  return Math.sign(x) * Number(`${rounded}e${-n}`);
+  return noNegZero(Math.sign(x) * Number(`${rounded}e${-n}`));
 }
 
+// Wpis: [min, max argumentów, funkcja, kierunek kąta]. Kierunek 'in' (sin…) bierze kąt, 'out' (arcsin…) go zwraca;
+// obie dostają tryb kątów jako ostatni argument.
 const FUNCS = dict({
-  sin: [1, 1, sin],
-  cos: [1, 1, cos],
-  tg: [1, 1, tg], tan: [1, 1, tg],
-  ctg: [1, 1, ctg], cot: [1, 1, ctg],
-  arcsin: [1, 1, (x) => fromRad(Math.asin(inUnit(x, 'arcsin')))],
-  arccos: [1, 1, (x) => fromRad(Math.acos(inUnit(x, 'arccos')))],
-  arctg: [1, 1, (x) => fromRad(Math.atan(x))],
-  arcctg: [1, 1, (x) => fromRad(Math.PI / 2 - Math.atan(x))],
+  sin: [1, 1, sin, 'in'],
+  cos: [1, 1, cos, 'in'],
+  tg: [1, 1, tg, 'in'], tan: [1, 1, tg, 'in'],
+  ctg: [1, 1, ctg, 'in'], cot: [1, 1, ctg, 'in'],
+  arcsin: [1, 1, (x, angle) => fromRad(Math.asin(inUnit(x, 'arcsin')), angle), 'out'],
+  arccos: [1, 1, (x, angle) => fromRad(Math.acos(inUnit(x, 'arccos')), angle), 'out'],
+  arctg: [1, 1, (x, angle) => fromRad(Math.atan(x), angle), 'out'],
+  arcctg: [1, 1, (x, angle) => fromRad(Math.PI / 2 - Math.atan(x), angle), 'out'],
   sinh: [1, 1, Math.sinh], cosh: [1, 1, Math.cosh], tgh: [1, 1, Math.tanh], tanh: [1, 1, Math.tanh],
   sqrt: [1, 1, (x) => { if (x < 0) throw err('Pierwiastek z liczby ujemnej'); return Math.sqrt(x); }],
   cbrt: [1, 1, Math.cbrt],
@@ -438,10 +452,19 @@ const FUNCS = dict({
 });
 Object.assign(FUNCS, { asin: FUNCS.arcsin, acos: FUNCS.arccos, atan: FUNCS.arctg, arctan: FUNCS.arctg });   // nazwy angielskie, jak tan i cot
 
+// Nazwa wbudowanej funkcji (sin, log10, √ to osobny znak) – interfejs używa tego przy kasowaniu „sin(” jednym ⌫
+export const isFunction = (name) => has(FUNCS, name);
+
 // ================= Tokenizer =================
 // Liczba: cyfry, najwyżej jeden przecinek (albo kropka) dziesiętny i wykładnik: 9,81 · 3.14 · ,5 · 1,5e3.
-// Dużych liczb nie dzielimy – ani spacją, ani kropką, ani przecinkiem: 1000000 albo 1e6.
-const NUM_RE = /^(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][+-]?\d+)?/;
+// Spacja (też twarda U+00A0 i wąska U+202F) może grupować cyfry jak w polskich tablicach: 384 400 · 6,626 070 15.
+// Część całkowita: grupy po dokładnie 3 cyfry; ułamek: pełna grupa po przecinku, ostatnia może być krótsza.
+// „2 3”, „2,5 3”, „12 34” to nadal dwie liczby (błąd). Kropką ani przecinkiem dużych liczb nie dzielimy.
+const GAP = '[ \\u00a0\\u202f]';
+const INT_PART = `(?:\\d{1,3}(?:${GAP}\\d{3})+(?!\\d)|\\d+)`;
+const FRAC_PART = `[.,](?:\\d{3}(?:${GAP}\\d{3})*(?:${GAP}\\d{1,3})?(?!\\d)|\\d+)`;
+const NUM_RE = new RegExp(`^(?:${INT_PART}(?:${FRAC_PART})?|${FRAC_PART})(?:[eE][+-]?\\d+)?`);
+const GAP_G = new RegExp(GAP, 'g');
 const OP_MAP = dict({ '×': '*', '·': '*', '⋅': '*', '∙': '*', '÷': '/', '−': '-', '–': '-', ';': ',' });
 const OPS = '+-*/^()!%=,√°';
 
@@ -460,18 +483,18 @@ function tokenize(src, vars, notes) {
   };
   // Jednostka za liczbą (co jest jednostką, a co nazwą – unitTerm):
   //  - za zwykłą liczbą należy do niej, więc 100 km/2h to 100 km / (2 h)
-  //  - za wykładnikiem przy 10 (6,67·10^-11 N, 10⁻¹¹ N, 10^(-11) N) dotyczy całej liczby: (6,67·10⁻¹¹)·N
+  //  - za wykładnikiem przy 10 (6,67·10^-11 N, 10⁻¹¹ N) dotyczy całej liczby: (6,67·10⁻¹¹)·N
+  //  - za nawiasem zamykającym: (2 + 3) m, sqrt(2) m, 10^(-11) N – chyba że to zmienna albo stała (afterParen)
   //  - za wykładnikiem przy innej podstawie jej nie ma: pi*r^2 h to π·r²·h
   //  - rad (2 rad, 5 mrad) działa jak ° w drugą stronę: w trybie DEG przelicza radiany na stopnie
-  const readUnit = (i, num = null) => {
-    const un = scanUnit(src, i, ctx);
+  const readUnit = (i, num = null, afterParen = false) => {
+    const un = scanUnit(src, i, ctx, { afterParen });
     if (!un) return i;
     if (num) Object.assign(num, { v: num.v * un.f, u: un.u, rawU: un.raw, uf: un.f });
     else t.push({ k: 'unit', v: un.f, u: un.u, rawU: un.raw, uf: un.f });
     if (/^[^·/^]*rad$/.test(un.raw)) t.push({ k: 'op', v: 'rad' });
     return un.end;
   };
-  const sciParens = [];                 // nawias otwarty zaraz po „10^”: 10^(-11) N
   let i = 0;
   while (i < src.length) {
     const ch = src[i];
@@ -484,7 +507,7 @@ function tokenize(src, vars, notes) {
       // Bez tych błędów „1.000.000”, „max(1,2,3)” i „1 000” dałyby po cichu 0, max(1,2·0,3) i 1·000 = 0
       if (/^[.,]\d/.test(src.slice(i))) throw err('Za dużo przecinków w liczbie – dużych liczb nie dziel (pisz 1000000 albo 1e6), argumenty oddzielaj średnikiem: max(1; 2; 3)');
       if (['num', 'unit'].includes(t.at(-1)?.k)) throw err('Dwie liczby obok siebie – wstaw znak działania (2*3, 1 h + 30 min), a dużych liczb nie dziel spacją: 1000000');
-      const v = parseFloat(text.replace(',', '.'));
+      const v = parseFloat(text.replace(GAP_G, '').replace(',', '.'));
       const tok = { k: 'num', v, u: {}, rawU: '', text };
       const pc = powerCtx();
       t.push(tok);
@@ -515,10 +538,9 @@ function tokenize(src, vars, notes) {
     }
     const op = OP_MAP[ch] || ch;
     if (OPS.includes(op)) {
-      if (op === '(') sciParens.push(isOp(t.at(-1), '^') && isTen(t.at(-2)));
       t.push({ k: 'op', v: op });
       i++;
-      if (op === ')' && sciParens.pop()) i = readUnit(i);
+      if (op === ')') i = readUnit(i, null, true);
       continue;
     }
     throw err(`Nieznany znak: ${ch}`);
@@ -533,18 +555,22 @@ function parse(tokens, vars) {
   const isOp = (v) => isOpAt(p, v);
   const startsValue = (t) => t && (t.k === 'num' || t.k === 'unit' || t.k === 'id' || (t.k === 'op' && (t.v === '(' || t.v === '√')));
 
+  // additive → term (* /) → juxt (mnożenie bez znaku) → unary (- + √) → power → postfix → primary.
+  // Mnożenie bez znaku wiąże mocniej niż * i /: 1/2π to 1/(2π), 100 m/2t to 100 m/(2 t).
   function additive() {
     let n = term();
     while (isOp('+') || isOp('-')) { const o = tokens[p++].v; n = { t: 'bin', o, a: n, b: term() }; }
     return n;
   }
   function term() {
+    let n = juxt();
+    while (isOp('*') || isOp('/')) { const o = tokens[p++].v; n = { t: 'bin', o, a: n, b: juxt() }; }
+    return n;
+  }
+  function juxt() {
     let n = unary();
-    for (;;) {
-      if (isOp('*') || isOp('/')) { const o = tokens[p++].v; n = { t: 'bin', o, a: n, b: unary() }; }
-      else if (startsValue(tokens[p])) n = { t: 'bin', o: '*', a: n, b: unary() };
-      else return n;
-    }
+    while (startsValue(tokens[p])) n = { t: 'bin', o: '*', implicit: true, a: n, b: unary() };
+    return n;
   }
   function unary() {
     if (isOp('-')) { p++; return { t: 'neg', a: unary() }; }
@@ -575,7 +601,7 @@ function parse(tokens, vars) {
     const tok = tokens[p++];
     if (!tok) throw err('Niedokończone wyrażenie');
     if (tok.k === 'num' || tok.k === 'unit') return { t: 'num', v: tok.v, u: tok.u, rawU: tok.rawU, uf: tok.uf ?? 1 };
-    if (tok.k === 'op' && tok.v === '(') { const n = additive(); closeParen(); return n; }
+    if (tok.k === 'op' && tok.v === '(') { const n = additive(); closeParen(); n.paren = true; return n; }
     if (tok.k === 'id') {
       if (has(FUNCS, tok.v) && !has(vars, tok.v)) {
         if (isOp('(')) {
@@ -585,7 +611,7 @@ function parse(tokens, vars) {
           closeParen();
           return { t: 'call', f: tok.v, args };
         }
-        return { t: 'call', f: tok.v, args: [unary()] };
+        return { t: 'call', f: tok.v, args: [juxt()] };           // sin 2π = sin(2π), ale sin 30 + 1 = sin(30) + 1
       }
       return { t: 'var', name: tok.v };
     }
@@ -612,29 +638,42 @@ function parse(tokens, vars) {
 }
 
 // ================= Obliczanie drzewa =================
-const Q = (v, u = {}) => ({ v, u });
+// Wielkość: wartość, jednostka SI i znacznik kąta płaskiego (ang). Czysty kąt trzyma wartość w bieżącym trybie
+// (DEG: stopnie, RAD: radiany). Kąt pomnożony lub podzielony przez wielkość z jednostką fizyczną liczy się w radianach SI
+// i przestaje być kątem: 2 rad / 1 s = 2 Hz, 2 rad * 0,5 m = 1 m.
+const Q = (v, u = {}, ang = false) => ({ v, u, ang });
 const U_KEEP = new Set(['abs', 'floor', 'ceil', 'min', 'max']);
 
-function evaluateTree(n, vars, ans) {
+// Wylicza każdy węzeł drzewa i zapisuje wynik w node.q – unitLine() i treeNotes() czytają go bez ponownego liczenia.
+function evaluateTree(tree, ctx) {
+  const { vars, ans, angle } = ctx;
+  const asSi = (q) => (q.ang && angle === 'deg' ? q.v * Math.PI / 180 : q.v);
+  const operands = (a, b) => ((a.ang || b.ang) && (!uNone(a.u) || !uNone(b.u)) ? [asSi(a), asSi(b)] : [a.v, b.v]);
+
   function evq(node) {
+    node.q = calc(node);
+    return node.q;
+  }
+
+  function calc(node) {
     switch (node.t) {
       case 'num': return Q(node.v, node.u);
       case 'var': {
         const name = node.name;
-        if (has(vars, name)) return Q(vars[name].v, vars[name].u || {});
-        if (name === 'ans') return Q(ans.v, ans.u || {});
+        if (has(vars, name)) return Q(vars[name].v, vars[name].u || {}, Boolean(vars[name].ang));
+        if (name === 'ans') return Q(ans.v, ans.u || {}, Boolean(ans.ang));
         if (has(CONST, name)) return Q(CONST[name].value, CONST[name].u);
         if (unitOf(name)) throw err(`„${name}” to jednostka – pisz ją zaraz za liczbą, np. 5 ${name}`);
         throw err(`Nieznana nazwa: ${name}`);
       }
-      case 'neg': { const a = evq(node.a); return Q(-a.v, a.u); }
-      case 'pct': { const a = evq(node.a); return Q(a.v / 100, a.u); }
+      case 'neg': { const a = evq(node.a); return Q(-a.v, a.u, a.ang); }
+      case 'pct': { const a = evq(node.a); return Q(a.v / 100, a.u, a.ang); }
       case 'deg': {
         const a = evq(node.a);
         if (!uNone(a.u)) throw err('Znak ° stawiaj przy liczbie bez jednostki, np. sin(30°)');
-        return Q(angleMode === 'deg' ? a.v : a.v * Math.PI / 180);
+        return Q(angle === 'deg' ? a.v : a.v * Math.PI / 180, {}, true);
       }
-      case 'rad': return Q(fromRad(evq(node.a).v));     // liczba z „rad” jest zawsze bez jednostki
+      case 'rad': return Q(fromRad(evq(node.a).v, angle), {}, true);     // liczba z „rad” jest kątem bez jednostki
       case 'fact': {
         const a = evq(node.a);
         if (!uNone(a.u)) throw err('Silnia działa tylko na liczbach bez jednostki');
@@ -648,12 +687,16 @@ function evaluateTree(n, vars, ans) {
           case '+': case '-': {
             const name = (u) => uText(u) || 'bezwymiarowa';
             if (!uEq(a.u, b.u)) throw err(`Nie można ${node.o === '+' ? 'dodać' : 'odjąć'} wielkości o różnych jednostkach: ${name(a.u)} i ${name(b.u)}`);
-            return Q(node.o === '+' ? a.v + b.v : a.v - b.v, a.u);
+            return Q(node.o === '+' ? a.v + b.v : a.v - b.v, a.u, a.ang || b.ang);
           }
-          case '*': return Q(a.v * b.v, uMul(a.u, b.u, 1));
+          case '*': {
+            const [x, y] = operands(a, b);
+            return Q(x * y, uMul(a.u, b.u, 1), a.ang !== b.ang && uNone(a.u) && uNone(b.u));   // kąt × liczba to kąt
+          }
           case '/': {
-            if (b.v === 0) throw err('Dzielenie przez zero');
-            return Q(a.v / b.v, uMul(a.u, b.u, -1));
+            const [x, y] = operands(a, b);
+            if (y === 0) throw err('Dzielenie przez zero');
+            return Q(x / y, uMul(a.u, b.u, -1), a.ang && !b.ang && uNone(b.u));          // kąt / kąt to stosunek
           }
           case '^': {
             if (!uNone(b.u)) throw err('Wykładnik potęgi nie może mieć jednostki');
@@ -665,35 +708,36 @@ function evaluateTree(n, vars, ans) {
         break;
       }
       case 'call': {
-        const [min, max, fn] = FUNCS[node.f];
+        const [min, max, fn, dir] = FUNCS[node.f];
         if (node.args.length < min || node.args.length > max) {
           const needed = min === 1 ? 'potrzebny 1 argument' : `potrzebne ${min} argumenty`;
           throw err(min === max ? `${node.f}: ${needed}` : `${node.f}: od ${min} do ${max} argumentów`);
         }
         const args = node.args.map(evq);
         if (node.f === 'round' && args[1] && !uNone(args[1].u)) throw err('round: liczba miejsc nie może mieć jednostki');
-        const v = fn(...args.map((q) => q.v));
+        const vals = args.map((q) => q.v);
+        const v = dir ? fn(...vals, angle) : fn(...vals);
         if (node.f === 'sqrt') return Q(v, uPow(args[0].u, 0.5));
         if (node.f === 'cbrt') return Q(v, uPow(args[0].u, 1 / 3));
         if (node.f === 'root') {
           if (!uNone(args[1].u)) throw err('Stopień pierwiastka nie może mieć jednostki');
           return Q(v, uPow(args[0].u, 1 / args[1].v));
         }
-        if (node.f === 'round') return Q(v, args[0].u);   // jednostkę ma tylko liczba, nie liczba miejsc
+        if (node.f === 'round') return Q(v, args[0].u, args[0].ang);   // jednostkę ma tylko liczba, nie liczba miejsc
         if (U_KEEP.has(node.f)) {
           const u = args[0].u;
           if (!args.every((q) => uEq(q.u, u))) throw err(`${node.f}: argumenty muszą mieć tę samą jednostkę`);
-          return Q(v, u);
+          return Q(v, u, args[0].ang);
         }
         const bad = args.find((q) => !uNone(q.u));
         if (bad) throw err(`${node.f}: argument nie może mieć jednostki (${uText(bad.u)})`);
-        return Q(v);
+        return Q(v, {}, dir === 'out');
       }
     }
     throw err('Błąd wyrażenia');
   }
 
-  return evq(n);
+  return evq(tree);
 }
 
 // ================= Druga linia: działania na jednostkach krok po kroku =================
@@ -710,15 +754,14 @@ function unitPiece(raw, u) {
   return { text, tex: raw ? rawToTex(raw) : uTex(u), prec: /[·/]/.test(text) ? 2 : /[⁰¹²³⁴⁵⁶⁷⁸⁹⁻^]/.test(text) ? 3 : 9 };
 }
 
-function unitLine(tree, vars, ans, result) {
-  const evq = (node) => evaluateTree(node, vars, ans);
+function unitLine(tree, vars, result) {
   const paren = (s, need) => (need ? { text: `(${s.text})`, tex: `\\left(${s.tex}\\right)` } : s);
 
   function walk(n) {
     switch (n.t) {
       case 'num': return uNone(n.u) ? BARE : unitPiece(n.rawU, n.u);
       case 'var': {
-        const { u } = evq(n);
+        const { u } = n.q;
         if (uNone(u)) return BARE;
         const own = !has(vars, n.name) && has(CONST, n.name) && CONST[n.name].unit;   // stała: jej zapis z tablic
         return unitPiece(own, u);
@@ -728,7 +771,7 @@ function unitLine(tree, vars, ans, result) {
         const a = walk(n.a);
         if (n.o === '^') {
           if (a.bare) return BARE;
-          const e = evq(n.b).v, base = paren(a, a.prec <= 3);     // (m/s)², (N·m)², (m²)^0,5
+          const e = n.b.q.v, base = paren(a, a.prec <= 3);     // (m/s)², (N·m)², (m²)^0,5
           return { text: base.text + expText(e), tex: `${base.tex}^{${e}}`, prec: 3 };
         }
         const b = walk(n.b);
@@ -745,7 +788,7 @@ function unitLine(tree, vars, ans, result) {
         const parts = (one ? n.args.slice(0, 1) : n.args).map(walk);
         if (parts.every((x) => x.bare)) return BARE;
         const text = parts.map((x) => x.text).join('; '), tex = parts.map((x) => x.tex).join(', ');
-        const k = n.f === 'root' ? evq(n.args[1]).v : { sqrt: 2, cbrt: 3 }[n.f];   // stopień pierwiastka
+        const k = n.f === 'root' ? n.args[1].q.v : { sqrt: 2, cbrt: 3 }[n.f];   // stopień pierwiastka
         const sign = k && ({ 2: '√', 3: '∛', 4: '∜' }[k] || (Number.isInteger(k) && k > 0 && supNum(k) + '√'));
         if (sign) return { text: `${sign}(${text})`, tex: `\\sqrt${k === 2 ? '' : `[${k}]`}{${tex}}`, prec: 9 };
         return { text: `${n.f}(${text})`, tex: `\\operatorname{${n.f}}\\left(${tex}\\right)`, prec: 9 };
@@ -897,31 +940,35 @@ function convertedUnit(node) {
 const hasPi = (node, vars) => (node.t === 'var' && (node.name === 'pi' || node.name === 'π') && !has(vars, node.name)) ||
   children(node).some((child) => hasPi(child, vars));
 
-function treeNotes(node, vars, ans, notes) {
+function treeNotes(node, ctx, notes) {
   const arg = node.t === 'call' && node.args[0];
   if (arg && ROUNDING.has(node.f)) {
     const raw = convertedUnit(arg);
-    const u = raw && evaluateTree(arg, vars, ans).u;
+    const u = raw && arg.q.u;
     if (raw && !uNone(u)) notes.add(`${node.f} zaokrągla w jednostkach SI (${unitLabel(u)}), nie w ${rawText(raw)}`);
   }
-  if (arg && TRIG.has(node.f) && angleMode === 'deg' && hasPi(arg, vars)) {
+  if (arg && TRIG.has(node.f) && ctx.angle === 'deg' && hasPi(arg, ctx.vars)) {
     notes.add(`Tryb DEG: ${node.f} liczy w stopniach, a π sugeruje radiany – przełącz na RAD`);
   }
-  for (const child of children(node)) treeNotes(child, vars, ans, notes);
+  // 1/2π to 1/(2π): mnożenie bez znaku wiąże mocniej niż / (chyba że mianownik jest w nawiasie)
+  if (node.t === 'bin' && node.o === '/' && node.b.implicit && !node.b.paren) {
+    notes.add('„a/b c” policzono jako a/(b·c) – aby pomnożyć ułamek, użyj znaku *: (a/b)*c');
+  }
+  for (const child of children(node)) treeNotes(child, ctx, notes);
 }
 
 // ================= Wejście silnika =================
-// evaluate('v = 72 km/h', { vars, ans, angle }) → { assign, v, u, src, units, notes }; błąd → CalcError.
-// vars i ans: { v, u } – wartość w SI i jednostka
+// evaluate('v = 72 km/h', { vars, ans, angle }) → { assign, v, u, ang, src, units, notes }; błąd → CalcError.
+// vars i ans: { v, u, ang? } – wartość (w SI; kąt w trybie, w którym go policzono), jednostka i znacznik kąta
 export function evaluate(raw, { vars = {}, ans = { v: 0, u: {} }, angle = 'deg' } = {}) {
-  angleMode = angle === 'rad' ? 'rad' : 'deg';
+  const ctx = { vars, ans, angle: angle === 'rad' ? 'rad' : 'deg' };
   const src = balance(raw);
   const notes = new Set();
   // µ z polskiej klawiatury (AltGr+M, znak mikro U+00B5) czytamy jak greckie μ: μ0, μB, μF
   const { assign, tree } = parse(tokenize(src.replace(/µ/g, 'μ'), vars, notes), vars);
-  const q = evaluateTree(tree, vars, ans);
-  treeNotes(tree, vars, ans, notes);
+  const q = evaluateTree(tree, ctx);
+  treeNotes(tree, ctx, notes);
   if (Number.isNaN(q.v)) throw err('Wynik nieokreślony');
   if (!Number.isFinite(q.v)) throw err('Wynik poza zakresem');
-  return { assign, v: q.v, u: q.u, src, units: unitLine(tree, vars, ans, q), notes: [...notes] };
+  return { assign, v: noNegZero(q.v), u: q.u, ang: q.ang, src, units: unitLine(tree, vars, q), notes: [...notes] };
 }

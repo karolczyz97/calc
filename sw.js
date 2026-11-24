@@ -1,8 +1,13 @@
 // Kalkulator – pamięć podręczna, dzięki której działa bez internetu.
 // Strona i motyw: najpierw z sieci (zawsze świeże, bez ręcznych ?v=), bez sieci – ostatnia zapisana wersja.
-// KaTeX z CDN ma stały numer wersji, więc bierzemy go od razu z pamięci.
-const CACHE = 'calc-v12';
+// KaTeX w lib/katex się nie zmienia, więc bierzemy go od razu z pamięci (jak pdf.js w DarkPDF).
+const CACHE = 'calc-v13';
 const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'calc.css', 'calc-app.js', 'calc-engine.js',
+  'lib/katex/katex.min.js', 'lib/katex/katex.min.css',
+  'lib/katex/fonts/KaTeX_Main-Regular.woff2',
+  'lib/katex/fonts/KaTeX_Math-Italic.woff2',
+  'lib/katex/fonts/KaTeX_Size1-Regular.woff2',
+  'lib/katex/fonts/KaTeX_Size2-Regular.woff2',   // fonty wzorów jednostek; resztę dociąga i zapamiętuje pierwsze użycie
   '../darkpdf/theme.css', '../darkpdf/fonts/google-sans-flex-latin.woff2',
   '../darkpdf/fonts/google-sans-flex-latin-ext.woff2'];   // wspólna paleta i font
 
@@ -23,15 +28,14 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  const katex = url.hostname === 'cdn.jsdelivr.net' && url.pathname.startsWith('/npm/katex@');
-  if (url.origin !== location.origin && !katex) return;
+  if (url.origin !== location.origin) return;
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    if (katex) {
+    if (url.pathname.includes('/lib/katex/')) {
       const hit = await cache.match(req);
       if (hit) return hit;
       const res = await fetch(req);
-      if (res.ok || res.type === 'opaque') cache.put(req, res.clone());
+      if (res.ok) cache.put(req, res.clone());
       return res;
     }
     const hit = await cache.match(req, { ignoreSearch: true });
